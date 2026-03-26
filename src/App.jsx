@@ -264,7 +264,7 @@ function SettingsScreen({ regimen, onSelectRegimen }) {
 /* ============================================================
    SCREEN: DASHBOARD
    ============================================================ */
-function DashboardScreen({ sessions, year, month, onNavigateCalendar, onChangeMonth, onOpenSettings }) {
+function DashboardScreen({ sessions, year, month, onNavigateCalendar, onChangeMonth, onOpenSettings, onLogWorkout }) {
   const catTotals = useMemo(() => getCategoryMonthlyTotals(sessions, year, month), [sessions, year, month]);
   const totalSets = useMemo(() => getMonthlySets(sessions, year, month), [sessions, year, month]);
   const totalTonnage = useMemo(() => getMonthlyTonnage(sessions, year, month), [sessions, year, month]);
@@ -275,6 +275,11 @@ function DashboardScreen({ sessions, year, month, onNavigateCalendar, onChangeMo
 
   return (
     <div className="dashboard">
+      {/* Log workout CTA */}
+      <button className="dashboard-log-btn" onClick={onLogWorkout}>
+        ＋ Log Workout
+      </button>
+
       {/* Big stats */}
       <div className="big-stats">
         <div className="big-stat">
@@ -1178,6 +1183,7 @@ export default function App() {
               onNavigateCalendar={handleNavigateCalendar}
               onChangeMonth={changeMonth}
               onOpenSettings={handleOpenSettings}
+              onLogWorkout={handleAddEntry}
             />
           ) : activeTab === 'calendar' ? (
             <CalendarScreen
