@@ -470,7 +470,7 @@ function ExerciseCard({ exercise, onUpdate, onRemove }) {
               <Stepper
                 value={set.weight_kg || 0}
                 onChange={v => updateSet(set.id, 'weight_kg', v)}
-                min={0} max={200} step={2.5}
+                min={0} max={500} step={2.5}
               />
               <span className="set-unit">kg ×</span>
               <Stepper
