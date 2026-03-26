@@ -516,6 +516,13 @@ body {
   margin-bottom: 24px;
 }
 
+.empty-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
 .import-btn {
   background: var(--accent);
   color: #fff;

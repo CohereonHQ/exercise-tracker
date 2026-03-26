@@ -41,16 +41,19 @@ function StatCard({ label, value, unit, color }) {
   );
 }
 
-function EmptyState({ onImport }) {
+function EmptyState({ onImport, onAddManually }) {
   return (
     <div className="empty-state">
       <div className="empty-icon">📋</div>
       <h2>No workout data yet</h2>
       <p>Import a CSV file or add entries manually to get started.</p>
-      <label className="btn btn-primary import-btn">
-        <input type="file" accept=".csv" style={{ display: 'none' }} onChange={onImport} />
-        Import CSV
-      </label>
+      <div className="empty-actions">
+        <label className="btn btn-primary import-btn">
+          <input type="file" accept=".csv" style={{ display: 'none' }} onChange={onImport} />
+          Import CSV
+        </label>
+        <button className="btn btn-secondary" onClick={onAddManually}>Add Manually</button>
+      </div>
     </div>
   );
 }
@@ -504,7 +507,7 @@ function App() {
       </header>
 
       {!hasData ? (
-        <EmptyState onImport={importCSV} />
+        <EmptyState onImport={importCSV} onAddManually={openAddModal} />
       ) : (
         <>
           <nav className="tab-nav">
@@ -531,11 +534,11 @@ function App() {
               <WeeklyCalendar data={rawData} filter={filter} onEdit={openEditModal} onDelete={handleDeleteEntry} />
             )}
           </main>
-
-          {/* Floating Add Button */}
-          <button className="fab" onClick={openAddModal} title="Add Workout">+</button>
         </>
       )}
+
+      {/* Floating Add Button — always visible */}
+      <button className="fab" onClick={openAddModal} title="Add Workout">+</button>
 
       {error && <div className="error-banner">{error} <button onClick={() => setError(null)}>×</button></div>}
 
