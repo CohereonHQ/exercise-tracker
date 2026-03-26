@@ -4,6 +4,7 @@ import {
   getMonthKey, getMonthName, getDaysInMonth, getFirstDayOfMonth, formatDate,
   calculateStreak, getCategoryMonthlyTotals, getMonthlySets, getMonthlyTonnage, getMonthlyCalories,
   getDailyTotalsForMonth, getHeatmapData, getHeatmapQuartiles, getHeatmapLevel,
+  getWeekComparison,
   getStatsData, toCSV, downloadCSV,
   MUSCLE_GROUP_ORDER, CATEGORY_COLORS, CARDIO_MUSCLE_GROUPS,
   EXERCISE_LIBRARY, SPLIT_MUSCLE_GROUPS,
@@ -264,14 +265,27 @@ function SettingsScreen({ regimen, onSelectRegimen }) {
 /* ============================================================
    SCREEN: DASHBOARD
    ============================================================ */
+function ChangeBadge({ value, label }) {
+  const isPositive = value > 0;
+  const isNeutral = value === 0;
+  const color = isNeutral ? '#888' : isPositive ? '#10b981' : '#ef4444';
+  const arrow = isNeutral ? '—' : isPositive ? '↑' : '↓';
+  return (
+    <div className="change-badge" style={{ color }}>
+      <span className="change-arrow">{arrow}</span>
+      <span className="change-value">{Math.abs(value)}%</span>
+      <span className="change-label">{label}</span>
+    </div>
+  );
+}
+
 function DashboardScreen({ sessions, year, month, onNavigateCalendar, onChangeMonth, onOpenSettings, onLogWorkout }) {
   const catTotals = useMemo(() => getCategoryMonthlyTotals(sessions, year, month), [sessions, year, month]);
   const totalSets = useMemo(() => getMonthlySets(sessions, year, month), [sessions, year, month]);
   const totalTonnage = useMemo(() => getMonthlyTonnage(sessions, year, month), [sessions, year, month]);
   const totalCals = useMemo(() => getMonthlyCalories(sessions, year, month), [sessions, year, month]);
   const streak = useMemo(() => calculateStreak(sessions), [sessions]);
-  const heatmap = useMemo(() => getHeatmapData(sessions, 28), [sessions]);
-  const quartiles = useMemo(() => getHeatmapQuartiles(heatmap), [heatmap]);
+  const weekCompare = useMemo(() => getWeekComparison(sessions), [sessions]);
 
   return (
     <div className="dashboard">
@@ -326,18 +340,30 @@ function DashboardScreen({ sessions, year, month, onNavigateCalendar, onChangeMo
         <span className="streak-sub">consecutive workout days</span>
       </div>
 
-      {/* Heatmap */}
-      <div className="heatmap-section">
-        <div className="heatmap-title">Last 28 Days (tonnage)</div>
-        <div className="heatmap-grid">
-          {heatmap.map(({ date, volume }) => (
-            <div
-              key={date}
-              className={`heatmap-cell l${getHeatmapLevel(volume, quartiles)}`}
-            >
-              <div className="heatmap-tooltip">{date}: {volume.toLocaleString()} kg</div>
-            </div>
-          ))}
+      {/* This week vs last week */}
+      <div className="week-compare">
+        <div className="week-compare-title">This Week vs Last Week</div>
+        <div className="week-compare-row">
+          <div className="week-col">
+            <div className="week-col-label">This Week</div>
+            <div className="week-col-sets">{weekCompare.thisWeek.sets} <span>sets</span></div>
+            <div className="week-col-tonnage">{(weekCompare.thisWeek.tonnage / 1000).toFixed(1)}k <span>kg</span></div>
+            <div className="week-col-days">{weekCompare.thisWeek.workoutDays} <span>days</span></div>
+          </div>
+          <div className="week-divider" />
+          <div className="week-col">
+            <div className="week-col-label">Last Week</div>
+            <div className="week-col-sets dim">{weekCompare.lastWeek.sets} <span>sets</span></div>
+            <div className="week-col-tonnage dim">{(weekCompare.lastWeek.tonnage / 1000).toFixed(1)}k <span>kg</span></div>
+            <div className="week-col-days dim">{weekCompare.lastWeek.workoutDays} <span>days</span></div>
+          </div>
+          <div className="week-divider" />
+          <div className="week-col">
+            <div className="week-col-label">Change</div>
+            <ChangeBadge value={weekCompare.setsChange} label="sets" />
+            <ChangeBadge value={weekCompare.tonnageChange} label="kg" />
+            <ChangeBadge value={weekCompare.daysChange} label="days" />
+          </div>
         </div>
       </div>
     </div>

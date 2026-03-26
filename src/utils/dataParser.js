@@ -172,6 +172,67 @@ export function getFirstDayOfMonth(year, month) {
   return new Date(year, month, 1).getDay();
 }
 
+// Get week boundaries (Mon–Sun) for a given date
+export function getWeekBounds(date) {
+  const d = new Date(date);
+  const day = d.getDay(); // 0=Sun
+  const diffToMon = day === 0 ? -6 : 1 - day; // Mon offset
+  const mon = new Date(d);
+  mon.setDate(d.getDate() + diffToMon);
+  mon.setHours(0, 0, 0, 0);
+  const sun = new Date(mon);
+  sun.setDate(mon.getDate() + 6);
+  sun.setHours(23, 59, 59, 999);
+  return { weekStart: mon, weekEnd: sun };
+}
+
+// Get week totals for sessions within a week range
+export function getWeekTotals(sessions, weekStart, weekEnd) {
+  let sets = 0, tonnage = 0, workoutDays = 0;
+  const startStr = weekStart.toISOString().split('T')[0];
+  const endStr = weekEnd.toISOString().split('T')[0];
+
+  for (const [dateStr, session] of Object.entries(sessions)) {
+    if (dateStr < startStr || dateStr > endStr) continue;
+    if (session.isRest) continue;
+    const daySets = (session.exercises || []).reduce((sum, ex) => sum + (ex.sets || []).length, 0);
+    const dayTonnage = (session.exercises || []).reduce((sum, ex) => {
+      return sum + (ex.sets || []).reduce((s, set) => s + (set.weight_kg || 0) * (set.reps || 0), 0);
+    }, 0);
+    if (daySets > 0) workoutDays++;
+    sets += daySets;
+    tonnage += dayTonnage;
+  }
+  return { sets, tonnage, workoutDays };
+}
+
+// This week vs last week comparison
+export function getWeekComparison(sessions) {
+  const today = new Date();
+  const thisWeek = getWeekBounds(today);
+  const lastWeekStart = new Date(thisWeek.weekStart);
+  lastWeekStart.setDate(lastWeekStart.getDate() - 7);
+  const lastWeekEnd = new Date(lastWeekStart);
+  lastWeekEnd.setDate(lastWeekStart.getDate() + 6);
+  lastWeekEnd.setHours(23, 59, 59, 999);
+
+  const thisWeekData = getWeekTotals(sessions, thisWeek.weekStart, thisWeek.weekEnd);
+  const lastWeekData = getWeekTotals(sessions, lastWeekStart, lastWeekEnd);
+
+  const pctChange = (curr, prev) => {
+    if (prev === 0) return curr > 0 ? 100 : 0;
+    return Math.round(((curr - prev) / prev) * 100);
+  };
+
+  return {
+    thisWeek: thisWeekData,
+    lastWeek: lastWeekData,
+    setsChange: pctChange(thisWeekData.sets, lastWeekData.sets),
+    tonnageChange: pctChange(thisWeekData.tonnage, lastWeekData.tonnage),
+    daysChange: pctChange(thisWeekData.workoutDays, lastWeekData.workoutDays),
+  };
+}
+
 // Calculate streak (consecutive days with >=1 workout, ignoring rest days)
 export function calculateStreak(sessions) {
   const sessionDates = Object.keys(sessions);
