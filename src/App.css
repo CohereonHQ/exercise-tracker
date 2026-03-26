@@ -574,7 +574,7 @@ body {
 .stepper-label {
   font-size: 12px;
   color: var(--text-dim);
-  width: 70px;
+  width: 80px;
   flex-shrink: 0;
 }
 
@@ -601,6 +601,8 @@ body {
   transition: background 0.1s, border-color 0.1s;
   flex-shrink: 0;
   user-select: none;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .stepper-btn:hover {
@@ -1364,6 +1366,312 @@ body {
 .split-picker-cancel:hover {
   background: var(--bg4);
   color: var(--text);
+}
+
+/* ============================================================
+   LOG BACK BUTTON
+   ============================================================ */
+.log-back-btn {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 0;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.log-back-btn:active {
+  opacity: 0.7;
+}
+
+/* ============================================================
+   EXERCISE LIST & CARDS
+   ============================================================ */
+.add-exercise-btn {
+  width: 100%;
+  padding: 12px;
+  border-radius: var(--radius-sm);
+  background: var(--bg3);
+  border: 2px dashed var(--border-bright);
+  color: var(--accent);
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  min-height: 48px;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.add-exercise-btn:hover {
+  background: var(--bg4);
+  border-color: var(--accent);
+}
+
+.add-exercise-btn:active {
+  transform: scale(0.98);
+}
+
+.exercise-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.exercise-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  transition: border-color 0.15s;
+}
+
+.exercise-card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.exercise-color-bar {
+  width: 4px;
+  height: 24px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.exercise-name {
+  flex: 1;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.exercise-remove-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--bg4);
+  border: none;
+  color: var(--text-dim);
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.1s, color 0.1s;
+}
+
+.exercise-remove-btn:hover {
+  background: #ef4444;
+  color: #fff;
+}
+
+.exercise-sets-list {
+  padding: 10px 14px;
+}
+
+.set-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.set-num {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-dim);
+  width: 44px;
+  flex-shrink: 0;
+}
+
+.set-inputs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+}
+
+.set-unit {
+  font-size: 11px;
+  color: var(--text-dim);
+  flex-shrink: 0;
+}
+
+.set-remove-btn {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--bg4);
+  border: none;
+  color: var(--text-dim);
+  font-size: 13px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.1s, color 0.1s;
+}
+
+.set-remove-btn:hover {
+  background: #ef4444;
+  color: #fff;
+}
+
+.add-set-btn {
+  width: 100%;
+  padding: 8px;
+  border-radius: 6px;
+  background: var(--bg3);
+  border: 1px dashed var(--border-bright);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  margin-top: 4px;
+  min-height: 36px;
+  transition: background 0.15s;
+}
+
+.add-set-btn:hover {
+  background: var(--bg4);
+}
+
+.exercise-subtotal {
+  padding: 8px 14px;
+  font-size: 11px;
+  color: var(--text-dim);
+  border-top: 1px solid var(--border);
+  background: var(--bg3);
+}
+
+/* ============================================================
+   EXERCISE PICKER MODAL
+   ============================================================ */
+.exercise-picker-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  z-index: 200;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.exercise-picker-sheet {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius) var(--radius) 0 0;
+  padding: 24px 20px;
+  width: 100%;
+  max-width: 480px;
+}
+
+.exercise-picker-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  text-align: center;
+  margin-bottom: 16px;
+}
+
+.exercise-picker-search-wrap {
+  margin-bottom: 16px;
+}
+
+.exercise-picker-select {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 0.95rem;
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%238890a4'%3E%3Cpath d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+}
+
+.exercise-picker-select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.exercise-picker-select optgroup {
+  background: var(--bg2);
+  color: var(--text-dim);
+  font-weight: 700;
+}
+
+.exercise-picker-select option {
+  background: var(--bg3);
+  color: var(--text);
+  padding: 8px;
+}
+
+.exercise-picker-cancel {
+  width: 100%;
+  padding: 14px;
+  border-radius: var(--radius-sm);
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  min-height: 48px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.exercise-picker-cancel:hover {
+  background: var(--bg4);
+  color: var(--text);
+}
+
+/* ============================================================
+   CARDIO SECTION IN LOG
+   ============================================================ */
+.cardio-section {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  margin-bottom: 100px;
+}
+
+.cardio-title {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--text-dim);
+  margin-bottom: 12px;
+}
+
+/* ============================================================
+   REST DAY
+   ============================================================ */
+.rest-day-msg {
+  text-align: center;
+  padding: 24px;
+  font-size: 0.95rem;
+  color: var(--text-dim);
+  margin-bottom: 16px;
 }
 
 /* ============================================================

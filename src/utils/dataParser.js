@@ -1,13 +1,12 @@
-// Data utility functions for exercise tracker V2
-// Storage key: exerciseTrackerDataV2
-// Each entry: { id, date: "YYYY-MM-DD", muscle_group, sets, reps, walk_min, cardio_min, hiit_min, calories }
+// Data utility functions for exercise tracker V3
+// Storage key: exerciseTrackerDataV3
+// Each session entry: { date, splitType, exercises: [{id, name, muscle_group, sets:[{id, weight_kg, reps}]}], cardio: { walk_min, cardio_min, hiit_min, calories } }
 
-export const STORAGE_KEY = 'exerciseTrackerDataV2';
+export const STORAGE_KEY_V3 = 'exerciseTrackerDataV3';
 
 export const MUSCLE_GROUP_ORDER = [
   'back', 'biceps', 'lower_back', 'traps', 'legs', 'glutes',
   'quads', 'hamstring', 'calf', 'chest', 'shoulder', 'triceps', 'abs',
-  'cardio_walk', 'cardio_generic', 'hiit',
 ];
 
 export const CATEGORY_COLORS = {
@@ -26,36 +25,120 @@ export const CATEGORY_MUSCLE_GROUPS = {
 
 export const CARDIO_MUSCLE_GROUPS = ['cardio_walk', 'cardio_generic', 'hiit'];
 
-// Load data from localStorage
-export function loadData() {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (!stored) return [];
-    const parsed = JSON.parse(stored);
-    if (!Array.isArray(parsed)) return [];
-    return parsed;
-  } catch {
-    return [];
-  }
-}
+/* ============================================================
+   EXERCISE LIBRARY
+   ============================================================ */
+export const EXERCISE_LIBRARY = {
+  chest: [
+    { name: 'Bench Press', muscle_group: 'chest' },
+    { name: 'Incline Bench Press', muscle_group: 'chest' },
+    { name: 'Dumbbell Press', muscle_group: 'chest' },
+    { name: 'Incline Dumbbell Press', muscle_group: 'chest' },
+    { name: 'Cable Flyes', muscle_group: 'chest' },
+    { name: 'Push-ups', muscle_group: 'chest' },
+    { name: 'Chest Dips', muscle_group: 'chest' },
+  ],
+  shoulders: [
+    { name: 'Overhead Press', muscle_group: 'shoulders' },
+    { name: 'Lateral Raises', muscle_group: 'shoulders' },
+    { name: 'Front Raises', muscle_group: 'shoulders' },
+    { name: 'Face Pulls', muscle_group: 'shoulders' },
+    { name: 'Arnold Press', muscle_group: 'shoulders' },
+  ],
+  triceps: [
+    { name: 'Tricep Pushdowns', muscle_group: 'triceps' },
+    { name: 'Skull Crushers', muscle_group: 'triceps' },
+    { name: 'Close Grip Bench', muscle_group: 'triceps' },
+    { name: 'Overhead Tricep Extension', muscle_group: 'triceps' },
+  ],
+  back: [
+    { name: 'Deadlift', muscle_group: 'back' },
+    { name: 'Barbell Rows', muscle_group: 'back' },
+    { name: 'Lat Pulldown', muscle_group: 'back' },
+    { name: 'Seated Cable Row', muscle_group: 'back' },
+    { name: 'Pull-ups', muscle_group: 'back' },
+    { name: 'T-Bar Row', muscle_group: 'back' },
+  ],
+  biceps: [
+    { name: 'Barbell Curl', muscle_group: 'biceps' },
+    { name: 'Dumbbell Curl', muscle_group: 'biceps' },
+    { name: 'Hammer Curl', muscle_group: 'biceps' },
+    { name: 'Preacher Curl', muscle_group: 'biceps' },
+  ],
+  traps: [
+    { name: 'Shrugs', muscle_group: 'traps' },
+    { name: 'Rack Pulls', muscle_group: 'traps' },
+  ],
+  lower_back: [
+    { name: 'Good Mornings', muscle_group: 'lower_back' },
+    { name: 'Back Extensions', muscle_group: 'lower_back' },
+    { name: 'Superman', muscle_group: 'lower_back' },
+  ],
+  quads: [
+    { name: 'Squat', muscle_group: 'quads' },
+    { name: 'Leg Press', muscle_group: 'quads' },
+    { name: 'Leg Extension', muscle_group: 'quads' },
+    { name: 'Bulgarian Split Squat', muscle_group: 'quads' },
+    { name: 'Lunges', muscle_group: 'quads' },
+    { name: 'Hack Squat', muscle_group: 'quads' },
+  ],
+  hamstring: [
+    { name: 'Romanian Deadlift', muscle_group: 'hamstring' },
+    { name: 'Leg Curl', muscle_group: 'hamstring' },
+    { name: 'Stiff-Leg Deadlift', muscle_group: 'hamstring' },
+  ],
+  glutes: [
+    { name: 'Hip Thrust', muscle_group: 'glutes' },
+    { name: 'Glute Bridge', muscle_group: 'glutes' },
+    { name: 'Cable Kickback', muscle_group: 'glutes' },
+  ],
+  calf: [
+    { name: 'Standing Calf Raise', muscle_group: 'calf' },
+    { name: 'Seated Calf Raise', muscle_group: 'calf' },
+  ],
+  abs: [
+    { name: 'Plank', muscle_group: 'abs' },
+    { name: 'Hanging Leg Raise', muscle_group: 'abs' },
+    { name: 'Cable Crunch', muscle_group: 'abs' },
+    { name: 'Ab Wheel', muscle_group: 'abs' },
+    { name: 'Russian Twist', muscle_group: 'abs' },
+  ],
+};
 
-// Save data to localStorage
-export function saveData(data) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-  } catch (e) {
-    console.warn('Failed to save data:', e);
-  }
-}
+// Split to primary muscle groups mapping
+export const SPLIT_MUSCLE_GROUPS = {
+  push:    ['chest', 'shoulder', 'triceps', 'abs'],
+  pull:    ['back', 'biceps', 'traps', 'lower_back'],
+  legs:    ['quads', 'hamstring', 'glutes', 'calf', 'abs'],
+  upper:   ['chest', 'back', 'shoulder', 'biceps', 'triceps', 'abs'],
+  lower:   ['quads', 'hamstring', 'glutes', 'calf'],
+};
 
 // Generate unique ID
 export function generateId() {
-  return `entry-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-// Get entries for a specific date
-export function getEntriesForDate(data, date) {
-  return data.filter(e => e.date === date);
+// Load V3 data from localStorage
+export function loadDataV3() {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY_V3);
+    if (!stored) return {};
+    const parsed = JSON.parse(stored);
+    if (typeof parsed !== 'object' || parsed === null) return {};
+    return parsed;
+  } catch {
+    return {};
+  }
+}
+
+// Save V3 data to localStorage
+export function saveDataV3(sessions) {
+  try {
+    localStorage.setItem(STORAGE_KEY_V3, JSON.stringify(sessions));
+  } catch (e) {
+    console.warn('Failed to save data:', e);
+  }
 }
 
 // Get month key string
@@ -90,26 +173,27 @@ export function getFirstDayOfMonth(year, month) {
 }
 
 // Calculate streak (consecutive days with >=1 workout, ignoring rest days)
-export function calculateStreak(data) {
-  if (!data || data.length === 0) return 0;
-  
-  // Get unique workout dates (exclude rest days)
-  const workoutDates = [...new Set(
-    data
-      .filter(e => e.muscle_group !== 'rest')
-      .map(e => e.date)
-  )].sort().reverse();
+export function calculateStreak(sessions) {
+  const sessionDates = Object.keys(sessions);
+  if (sessionDates.length === 0) return 0;
+
+  const workoutDates = sessionDates
+    .filter(date => {
+      const s = sessions[date];
+      return !s.isRest && s.exercises?.length > 0;
+    })
+    .sort()
+    .reverse();
 
   if (workoutDates.length === 0) return 0;
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  
-  // Check if most recent workout is today or yesterday
+
   const mostRecent = new Date(workoutDates[0]);
   const diffDays = Math.round((today - mostRecent) / (1000 * 60 * 60 * 24));
-  
-  if (diffDays > 1) return 0; // streak broken
+
+  if (diffDays > 1) return 0;
 
   let streak = 0;
   let currentDate = new Date(mostRecent);
@@ -119,13 +203,12 @@ export function calculateStreak(data) {
     const d = new Date(dateStr);
     d.setHours(0, 0, 0, 0);
     const diff = Math.round((currentDate - d) / (1000 * 60 * 60 * 24));
-    
+
     if (diff === 0) {
       streak++;
       currentDate = new Date(d);
       currentDate.setDate(currentDate.getDate() - 1);
     } else if (diff === 1) {
-      // continue streak
       streak++;
       currentDate = new Date(d);
       currentDate.setDate(currentDate.getDate() - 1);
@@ -138,80 +221,120 @@ export function calculateStreak(data) {
 }
 
 // Get monthly totals for a category
-export function getCategoryMonthlyTotals(data, year, month) {
+export function getCategoryMonthlyTotals(sessions, year, month) {
   const monthStr = getMonthKey(year, month);
-  const monthData = data.filter(e => e.date.startsWith(monthStr) && e.muscle_group !== 'rest');
-
   const totals = { back: 0, legs: 0, chest: 0, cardio: 0 };
 
-  for (const entry of monthData) {
-    const mg = entry.muscle_group;
-    if (['back', 'biceps', 'lower_back', 'traps'].includes(mg)) {
-      totals.back += entry.sets || 0;
-    } else if (['legs', 'glutes', 'quads', 'hamstring', 'calf'].includes(mg)) {
-      totals.legs += entry.sets || 0;
-    } else if (['chest', 'shoulder', 'triceps', 'abs'].includes(mg)) {
-      totals.chest += entry.sets || 0;
-    } else if (['cardio_walk', 'cardio_generic', 'hiit'].includes(mg)) {
-      totals.cardio += (entry.walk_min || 0) + (entry.cardio_min || 0) + (entry.hiit_min || 0);
+  Object.entries(sessions).forEach(([date, session]) => {
+    if (!date.startsWith(monthStr) || session.isRest) return;
+
+    // Cardio
+    if (session.cardio) {
+      totals.cardio += (session.cardio.walk_min || 0) + (session.cardio.cardio_min || 0) + (session.cardio.hiit_min || 0);
     }
-  }
+
+    // Exercises
+    (session.exercises || []).forEach(ex => {
+      const sets = ex.sets?.length || 0;
+      if (['back', 'biceps', 'lower_back', 'traps'].includes(ex.muscle_group)) {
+        totals.back += sets;
+      } else if (['legs', 'glutes', 'quads', 'hamstring', 'calf'].includes(ex.muscle_group)) {
+        totals.legs += sets;
+      } else if (['chest', 'shoulder', 'triceps', 'abs'].includes(ex.muscle_group)) {
+        totals.chest += sets;
+      }
+    });
+  });
 
   return totals;
 }
 
-// Get total volume for month (sum of sets * reps for non-rest, non-cardio)
-export function getMonthlyVolume(data, year, month) {
+// Get monthly total sets (for dashboard)
+export function getMonthlySets(sessions, year, month) {
   const monthStr = getMonthKey(year, month);
-  return data
-    .filter(e => e.date.startsWith(monthStr) && e.muscle_group !== 'rest' && !CARDIO_MUSCLE_GROUPS.includes(e.muscle_group))
-    .reduce((sum, e) => sum + (e.sets || 0) * (e.reps || 0), 0);
+  let totalSets = 0;
+
+  Object.entries(sessions).forEach(([date, session]) => {
+    if (!date.startsWith(monthStr) || session.isRest) return;
+    (session.exercises || []).forEach(ex => {
+      totalSets += ex.sets?.length || 0;
+    });
+  });
+
+  return totalSets;
+}
+
+// Get monthly total tonnage (for dashboard)
+export function getMonthlyTonnage(sessions, year, month) {
+  const monthStr = getMonthKey(year, month);
+  let totalTonnage = 0;
+
+  Object.entries(sessions).forEach(([date, session]) => {
+    if (!date.startsWith(monthStr) || session.isRest) return;
+    (session.exercises || []).forEach(ex => {
+      (ex.sets || []).forEach(set => {
+        totalTonnage += (set.weight_kg || 0) * (set.reps || 0);
+      });
+    });
+  });
+
+  return totalTonnage;
 }
 
 // Get total calories for month
-export function getMonthlyCalories(data, year, month) {
+export function getMonthlyCalories(sessions, year, month) {
   const monthStr = getMonthKey(year, month);
-  return data
-    .filter(e => e.date.startsWith(monthStr))
-    .reduce((sum, e) => sum + (e.calories || 0), 0);
+  let totalCals = 0;
+
+  Object.entries(sessions).forEach(([date, session]) => {
+    if (!date.startsWith(monthStr)) return;
+    if (session.cardio?.calories) totalCals += session.cardio.calories;
+  });
+
+  return totalCals;
 }
 
 // Get daily totals for a month (for calendar/heatmap)
-export function getDailyTotalsForMonth(data, year, month) {
+export function getDailyTotalsForMonth(sessions, year, month) {
   const monthStr = getMonthKey(year, month);
   const daysInMonth = getDaysInMonth(year, month);
-  const dailyTotals = {}; // date -> { sets, volume, calories, muscleGroups }
+  const dailyTotals = {};
 
   for (let d = 1; d <= daysInMonth; d++) {
     const dateStr = formatDate(year, month, d);
-    dailyTotals[dateStr] = { sets: 0, volume: 0, calories: 0, muscleGroups: new Set(), isRest: false };
+    dailyTotals[dateStr] = { sets: 0, tonnage: 0, calories: 0, muscleGroups: new Set(), isRest: false, splitType: null };
   }
 
-  for (const entry of data) {
-    if (!entry.date.startsWith(monthStr)) continue;
-    const day = dailyTotals[entry.date];
-    if (!day) continue;
+  Object.entries(sessions).forEach(([date, session]) => {
+    if (!date.startsWith(monthStr)) return;
+    const day = dailyTotals[date];
+    if (!day) return;
 
-    if (entry.muscle_group === 'rest') {
+    if (session.isRest) {
       day.isRest = true;
-    } else if (CARDIO_MUSCLE_GROUPS.includes(entry.muscle_group)) {
-      day.sets += 0;
-      day.volume += 0;
-      day.calories += entry.calories || 0;
-      day.muscleGroups.add(entry.muscle_group);
-    } else {
-      day.sets += entry.sets || 0;
-      day.volume += (entry.sets || 0) * (entry.reps || 0);
-      day.calories += entry.calories || 0;
-      if (entry.muscle_group) day.muscleGroups.add(entry.muscle_group);
     }
-  }
+
+    day.splitType = session.splitType || null;
+
+    if (session.cardio?.calories) day.calories += session.cardio.calories;
+
+    (session.exercises || []).forEach(ex => {
+      const setCount = ex.sets?.length || 0;
+      let exerciseTonnage = 0;
+      (ex.sets || []).forEach(set => {
+        exerciseTonnage += (set.weight_kg || 0) * (set.reps || 0);
+      });
+      day.sets += setCount;
+      day.tonnage += exerciseTonnage;
+      if (ex.muscle_group) day.muscleGroups.add(ex.muscle_group);
+    });
+  });
 
   return dailyTotals;
 }
 
 // Get heatmap data (last N days)
-export function getHeatmapData(data, days = 28) {
+export function getHeatmapData(sessions, days = 28) {
   const today = new Date();
   const result = [];
 
@@ -219,11 +342,16 @@ export function getHeatmapData(data, days = 28) {
     const d = new Date(today);
     d.setDate(d.getDate() - i);
     const dateStr = formatDate(d.getFullYear(), d.getMonth(), d.getDate());
-    const entries = data.filter(e => e.date === dateStr && e.muscle_group !== 'rest');
-    const volume = entries.reduce((sum, e) => {
-      if (CARDIO_MUSCLE_GROUPS.includes(e.muscle_group)) return sum;
-      return sum + (e.sets || 0) * (e.reps || 0);
-    }, 0);
+    const session = sessions[dateStr];
+
+    let volume = 0;
+    if (session && !session.isRest) {
+      (session.exercises || []).forEach(ex => {
+        (ex.sets || []).forEach(set => {
+          volume += (set.weight_kg || 0) * (set.reps || 0);
+        });
+      });
+    }
     result.push({ date: dateStr, volume });
   }
 
@@ -251,69 +379,102 @@ export function getHeatmapLevel(volume, quartiles) {
 }
 
 // Get stats data for stats screen
-export function getStatsData(data, year, month) {
+export function getStatsData(sessions, year, month) {
   const monthStr = getMonthKey(year, month);
-  const monthData = data.filter(e => e.date.startsWith(monthStr));
 
-  // Category totals
+  // Category totals (sets)
   const categoryTotals = { back: 0, legs: 0, chest: 0, cardio: 0 };
+  // Category tonnage
+  const categoryTonnage = { back: 0, legs: 0, chest: 0, cardio: 0 };
   // Muscle group totals
   const muscleTotals = {};
   // Daily volume
   const dailyVolume = {};
+  // Exercise-level stats
+  const exerciseStats = {};
+
   const daysInMonth = getDaysInMonth(year, month);
   for (let d = 1; d <= daysInMonth; d++) {
     const dateStr = formatDate(year, month, d);
     dailyVolume[dateStr] = 0;
   }
 
-  for (const entry of monthData) {
-    if (entry.muscle_group === 'rest') continue;
+  Object.entries(sessions).forEach(([date, session]) => {
+    if (!date.startsWith(monthStr) || session.isRest) return;
 
-    const isCardio = CARDIO_MUSCLE_GROUPS.includes(entry.muscle_group);
-    const sets = entry.sets || 0;
-    const reps = entry.reps || 0;
-    const volume = sets * reps;
-    const cardioMins = (entry.walk_min || 0) + (entry.cardio_min || 0) + (entry.hiit_min || 0);
-
-    // Category totals
-    if (['back', 'biceps', 'lower_back', 'traps'].includes(entry.muscle_group)) {
-      categoryTotals.back += sets;
-    } else if (['legs', 'glutes', 'quads', 'hamstring', 'calf'].includes(entry.muscle_group)) {
-      categoryTotals.legs += sets;
-    } else if (['chest', 'shoulder', 'triceps', 'abs'].includes(entry.muscle_group)) {
-      categoryTotals.chest += sets;
-    } else if (isCardio) {
+    // Cardio
+    if (session.cardio) {
+      const cardioMins = (session.cardio.walk_min || 0) + (session.cardio.cardio_min || 0) + (session.cardio.hiit_min || 0);
       categoryTotals.cardio += cardioMins;
+      categoryTonnage.cardio += session.cardio.calories || 0;
     }
 
-    // Muscle group totals
-    if (!muscleTotals[entry.muscle_group]) {
-      muscleTotals[entry.muscle_group] = { sets: 0, reps: 0, volume: 0, calories: 0, walk_min: 0, cardio_min: 0, hiit_min: 0 };
-    }
-    muscleTotals[entry.muscle_group].sets += sets;
-    muscleTotals[entry.muscle_group].reps += reps;
-    muscleTotals[entry.muscle_group].volume += volume;
-    muscleTotals[entry.muscle_group].calories += entry.calories || 0;
-    if (isCardio) {
-      muscleTotals[entry.muscle_group].walk_min += entry.walk_min || 0;
-      muscleTotals[entry.muscle_group].cardio_min += entry.cardio_min || 0;
-      muscleTotals[entry.muscle_group].hiit_min += entry.hiit_min || 0;
-    }
+    (session.exercises || []).forEach(ex => {
+      const setCount = ex.sets?.length || 0;
+      let exTonnage = 0;
+      let exReps = 0;
+      (ex.sets || []).forEach(set => {
+        exTonnage += (set.weight_kg || 0) * (set.reps || 0);
+        exReps += set.reps || 0;
+      });
 
-    // Daily volume (only non-cardio)
-    if (!isCardio && entry.date) {
-      dailyVolume[entry.date] = (dailyVolume[entry.date] || 0) + volume;
-    }
-  }
+      // Category classification
+      let catKey = null;
+      if (['back', 'biceps', 'lower_back', 'traps'].includes(ex.muscle_group)) catKey = 'back';
+      else if (['legs', 'glutes', 'quads', 'hamstring', 'calf'].includes(ex.muscle_group)) catKey = 'legs';
+      else if (['chest', 'shoulder', 'triceps', 'abs'].includes(ex.muscle_group)) catKey = 'chest';
 
-  return { categoryTotals, muscleTotals, dailyVolume };
+      if (catKey) {
+        categoryTotals[catKey] += setCount;
+        categoryTonnage[catKey] += exTonnage;
+      }
+
+      // Muscle group totals
+      if (!muscleTotals[ex.muscle_group]) {
+        muscleTotals[ex.muscle_group] = { sets: 0, reps: 0, tonnage: 0, exercises: {} };
+      }
+      muscleTotals[ex.muscle_group].sets += setCount;
+      muscleTotals[ex.muscle_group].reps += exReps;
+      muscleTotals[ex.muscle_group].tonnage += exTonnage;
+
+      // Exercise-level stats
+      if (!exerciseStats[ex.name]) {
+        exerciseStats[ex.name] = { sets: 0, reps: 0, tonnage: 0, muscle_group: ex.muscle_group };
+      }
+      exerciseStats[ex.name].sets += setCount;
+      exerciseStats[ex.name].reps += exReps;
+      exerciseStats[ex.name].tonnage += exTonnage;
+
+      // Daily volume (tonnage)
+      dailyVolume[date] = (dailyVolume[date] || 0) + exTonnage;
+    });
+  });
+
+  return { categoryTotals, categoryTonnage, muscleTotals, exerciseStats, dailyVolume };
 }
 
 // Export data to CSV
-export function toCSV(data) {
-  const headers = 'date,muscle_group,sets,reps,walk_min,cardio_min,hiit_min,calories';
-  const rows = data.map(e => `${e.date},${e.muscle_group},${e.sets},${e.reps},${e.walk_min},${e.cardio_min},${e.hiit_min},${e.calories}`);
+export function toCSV(sessions) {
+  const headers = 'date,split_type,exercise,muscle_group,set_num,weight_kg,reps';
+  const rows = [];
+
+  Object.entries(sessions)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .forEach(([date, session]) => {
+      (session.exercises || []).forEach((ex, ei) => {
+        (ex.sets || []).forEach((set, si) => {
+          rows.push(`${date},${session.splitType || ''},${ex.name},${ex.muscle_group},${si + 1},${set.weight_kg},${set.reps}`);
+        });
+      });
+      if (session.cardio) {
+        const c = session.cardio;
+        if (c.walk_min) rows.push(`${date},${session.splitType || ''},Walk,cardio_walk,1,0,${c.walk_min}`);
+        if (c.cardio_min) rows.push(`${date},${session.splitType || ''},Generic Cardio,cardio_generic,1,0,${c.cardio_min}`);
+        if (c.hiit_min) rows.push(`${date},${session.splitType || ''},HIIT,hiit,1,0,${c.hiit_min}`);
+        if (c.calories) rows.push(`${date},${session.splitType || ''},Calories,cardio,1,0,${c.calories}`);
+      }
+    });
+
   return [headers, ...rows].join('\n');
 }
 
