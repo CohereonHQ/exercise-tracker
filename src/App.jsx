@@ -196,7 +196,7 @@ function App() {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    fetch('/data.csv')
+    fetch(import.meta.env.BASE_URL + 'data.csv')
       .then(r => {
         if (!r.ok) throw new Error('Failed to load data');
         return r.text();
@@ -207,7 +207,7 @@ function App() {
         setLoading(false);
       })
       .catch(err => {
-        setError(err.message);
+        setError(err.message + ' — If hosted on GitHub Pages, data.csv may not be found.');
         setLoading(false);
       });
   }, []);
