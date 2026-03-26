@@ -111,7 +111,7 @@ function useAppData() {
 /* ============================================================
    STEPPER COMPONENT (fixed for mobile)
    ============================================================ */
-function Stepper({ value, onChange, min = 0, max = 99, step = 1 }) {
+function Stepper({ value, onChange, min = 0, max = 50, step = 1 }) {
   const intervalRef = useRef(null);
   const timeoutRef = useRef(null);
 
