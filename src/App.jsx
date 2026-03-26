@@ -499,10 +499,9 @@ function ExerciseCard({ exercise, onUpdate, onRemove }) {
    ============================================================ */
 function ExercisePickerModal({ splitType, onSelect, onCancel }) {
   // Build options: primary groups first, then others, always include cardio
-  const primaryMgs = splitType ? (SPLIT_MUSCLE_GROUPS[splitType] || []) : Object.keys(EXERCISE_LIBRARY);
-
   const allMgs = Object.keys(EXERCISE_LIBRARY);
-  const secondaryMgs = allMgs.filter(mg => !primaryMgs.includes(mg));
+  const primaryMgs = splitType ? (SPLIT_MUSCLE_GROUPS[splitType] || []) : allMgs;
+  const secondaryMgs = splitType ? [] : allMgs.filter(mg => !primaryMgs.includes(mg));
 
   const buildOptions = (mgs) => {
     const opts = [];
