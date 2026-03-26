@@ -1,557 +1,960 @@
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { parseCSV, getDailySummary, getMuscleGroupData, getWeeklyData, getChartData } from './utils/dataParser';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import {
+  loadData, saveData, generateId,
+  getMonthKey, getMonthName, getDaysInMonth, getFirstDayOfMonth, formatDate,
+  calculateStreak, getCategoryMonthlyTotals, getMonthlyVolume, getMonthlyCalories,
+  getDailyTotalsForMonth, getHeatmapData, getHeatmapQuartiles, getHeatmapLevel,
+  getStatsData, toCSV, downloadCSV,
+  MUSCLE_GROUP_ORDER, CATEGORY_COLORS, CARDIO_MUSCLE_GROUPS,
+} from './utils/dataParser';
 import './App.css';
 
-const STORAGE_KEY = 'exerciseTrackerData';
-const MUSCLE_GROUPS = ['all', 'chest', 'back', 'legs', 'shoulders', 'biceps', 'triceps', 'core', 'cardio', 'rest'];
-const FORM_MUSCLE_GROUPS = ['chest', 'back', 'legs', 'shoulders', 'biceps', 'triceps', 'core', 'cardio', 'rest'];
+/* ============================================================
+   ICONS
+   ============================================================ */
+const Icon = {
+  home: '🏠',
+  calendar: '📅',
+  stats: '📊',
+  plus: '＋',
+  chevronLeft: '‹',
+  chevronRight: '›',
+  chevronDown: '⌄',
+  back: '🏋️',
+  legs: '🦵',
+  chest: '💪',
+  cardio: '❤️',
+  fire: '🔥',
+};
 
-const CSV_HEADERS = 'day,muscle_group,reps,sets,walk_min,cardio_min,hiit_min,calories';
+/* ============================================================
+   CATEGORY CONFIG
+   ============================================================ */
+const CATEGORY_CONFIG = {
+  back:    { icon: Icon.back,   label: 'Back',    color: '#6366f1' },
+  legs:    { icon: Icon.legs,   label: 'Legs',    color: '#10b981' },
+  chest:   { icon: Icon.chest,  label: 'Chest',   color: '#ec4899' },
+  cardio:  { icon: Icon.cardio, label: 'Cardio',  color: '#f59e0b' },
+};
 
-function toCSV(data) {
-  const rows = data.map(e => `${e.day},${e.muscle_group},${e.reps},${e.sets},${e.walk_min},${e.cardio_min},${e.hiit_min},${e.calories}`);
-  return [CSV_HEADERS, ...rows].join('\n');
+const MUSCLE_CONFIG = {
+  back:          { color: '#6366f1', unit: 'sets' },
+  biceps:        { color: '#818cf8', unit: 'sets' },
+  lower_back:    { color: '#a78bfa', unit: 'sets' },
+  traps:         { color: '#7c3aed', unit: 'sets' },
+  legs:          { color: '#10b981', unit: 'sets' },
+  glutes:        { color: '#34d399', unit: 'sets' },
+  quads:         { color: '#059669', unit: 'sets' },
+  hamstring:     { color: '#047857', unit: 'sets' },
+  calf:          { color: '#065f46', unit: 'sets' },
+  chest:         { color: '#ec4899', unit: 'sets' },
+  shoulder:      { color: '#f472b6', unit: 'sets' },
+  triceps:       { color: '#db2777', unit: 'sets' },
+  abs:           { color: '#be185d', unit: 'sets' },
+  cardio_walk:   { color: '#f59e0b', unit: 'min' },
+  cardio_generic:{ color: '#d97706', unit: 'min' },
+  hiit:          { color: '#b45309', unit: 'min' },
+};
+
+/* ============================================================
+   UTILITY HOOKS
+   ============================================================ */
+function useAppData() {
+  const [data, setData] = useState(() => loadData());
+
+  useEffect(() => {
+    saveData(data);
+  }, [data]);
+
+  const addEntry = useCallback((entry) => {
+    setData(prev => {
+      const filtered = prev.filter(e => !(e.date === entry.date && e.muscle_group === entry.muscle_group));
+      return [...filtered, { ...entry, id: generateId() }];
+    });
+  }, []);
+
+  const removeEntry = useCallback((id) => {
+    setData(prev => prev.filter(e => e.id !== id));
+  }, []);
+
+  const replaceDayEntries = useCallback((date, entries) => {
+    setData(prev => {
+      const rest = prev.filter(e => e.date !== date);
+      return [...rest, ...entries.map(e => ({ ...e, id: generateId() }))];
+    });
+  }, []);
+
+  return { data, addEntry, removeEntry, replaceDayEntries };
 }
 
-function downloadCSV(csvText, filename = 'exercise_data.csv') {
-  const blob = new Blob([csvText], { type: 'text/csv' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-}
+/* ============================================================
+   STEPPER COMPONENT
+   ============================================================ */
+function Stepper({ value, onChange, min = 0, max = 999, step = 1 }) {
+  const intervalRef = useRef(null);
+  const timeoutRef = useRef(null);
 
-function validateEntry(entry) {
-  if (!entry.day || entry.day < 1 || entry.day > 31) return 'Day must be between 1 and 31';
-  if (!FORM_MUSCLE_GROUPS.includes(entry.muscle_group)) return 'Invalid muscle group';
-  if (entry.reps < 0 || entry.sets < 0 || entry.walk_min < 0 || entry.cardio_min < 0 || entry.hiit_min < 0 || entry.calories < 0) {
-    return 'All numeric fields must be 0 or greater';
-  }
-  return null;
-}
-
-function StatCard({ label, value, unit, color }) {
-  return (
-    <div className="stat-card" style={{ '--accent': color }}>
-      <div className="stat-value">{value}<span className="stat-unit">{unit}</span></div>
-      <div className="stat-label">{label}</div>
-    </div>
-  );
-}
-
-function EmptyState({ onImport, onAddManually }) {
-  return (
-    <div className="empty-state">
-      <div className="empty-icon">📋</div>
-      <h2>No workout data yet</h2>
-      <p>Import a CSV file or add entries manually to get started.</p>
-      <div className="empty-actions">
-        <label className="btn btn-primary import-btn">
-          <input type="file" accept=".csv" style={{ display: 'none' }} onChange={onImport} />
-          Import CSV
-        </label>
-        <button className="btn btn-secondary" onClick={onAddManually}>Add Manually</button>
-      </div>
-    </div>
-  );
-}
-
-function WorkoutModal({ entry, onSave, onDelete, onClose }) {
-  const isNew = !entry._id;
-  const [form, setForm] = useState({
-    day: entry.day ?? '',
-    muscle_group: entry.muscle_group ?? 'chest',
-    reps: entry.reps ?? '',
-    sets: entry.sets ?? '',
-    walk_min: entry.walk_min ?? '',
-    cardio_min: entry.cardio_min ?? '',
-    hiit_min: entry.hiit_min ?? '',
-    calories: entry.calories ?? '',
-  });
-  const [error, setError] = useState('');
-  const overlayRef = useRef(null);
-
-  const handleChange = (field, val) => {
-    setForm(f => ({ ...f, [field]: val }));
-  };
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    const parsed = {
-      ...form,
-      day: parseInt(form.day, 10),
-      reps: parseInt(form.reps, 10) || 0,
-      sets: parseInt(form.sets, 10) || 0,
-      walk_min: parseInt(form.walk_min, 10) || 0,
-      cardio_min: parseInt(form.cardio_min, 10) || 0,
-      hiit_min: parseInt(form.hiit_min, 10) || 0,
-      calories: parseInt(form.calories, 10) || 0,
+  const startHold = (delta) => {
+    const tick = () => {
+      onChange(prev => Math.min(max, Math.max(min, prev + delta)));
     };
-    const err = validateEntry(parsed);
-    if (err) { setError(err); return; }
-    setError('');
-    onSave(parsed, entry._id);
+    timeoutRef.current = setTimeout(() => {
+      intervalRef.current = setInterval(tick, 80);
+    }, 400);
   };
 
-  const handleDelete = () => {
-    if (window.confirm('Delete this entry?')) {
-      onDelete(entry._id);
-    }
+  const endHold = () => {
+    clearTimeout(timeoutRef.current);
+    clearInterval(intervalRef.current);
   };
 
-  const handleOverlayClick = (e) => {
-    if (e.target === overlayRef.current) onClose();
+  const handleBtnMouseDown = (delta) => (e) => {
+    e.preventDefault();
+    onChange(prev => Math.min(max, Math.max(min, prev + delta)));
+    startHold(delta);
+  };
+
+  useEffect(() => () => {
+    clearTimeout(timeoutRef.current);
+    clearInterval(intervalRef.current);
+  }, []);
+
+  return (
+    <div className="stepper-controls">
+      <button
+        className="stepper-btn"
+        onMouseDown={handleBtnMouseDown(-step)}
+        onMouseUp={endHold}
+        onMouseLeave={endHold}
+        onTouchStart={handleBtnMouseDown(-step)}
+        onTouchEnd={endHold}
+      >−</button>
+      <input
+        type="number"
+        className="stepper-input"
+        value={value}
+        min={min}
+        max={max}
+        onChange={e => onChange(Math.min(max, Math.max(min, Number(e.target.value) || 0)))}
+      />
+      <button
+        className="stepper-btn"
+        onMouseDown={handleBtnMouseDown(step)}
+        onMouseUp={endHold}
+        onMouseLeave={endHold}
+        onTouchStart={handleBtnMouseDown(step)}
+        onTouchEnd={endHold}
+      >+</button>
+    </div>
+  );
+}
+
+/* ============================================================
+   DATE PICKER MODAL
+   ============================================================ */
+function DatePickerModal({ year, month, day, onSelect, onClose }) {
+  const [viewYear, setViewYear] = useState(year);
+  const [viewMonth, setViewMonth] = useState(month);
+
+  const daysInView = getDaysInMonth(viewYear, viewMonth);
+  const firstDay = getFirstDayOfMonth(viewYear, viewMonth);
+  const today = new Date();
+
+  const cells = [];
+  for (let i = 0; i < firstDay; i++) cells.push(null);
+  for (let d = 1; d <= daysInView; d++) cells.push(d);
+
+  const isSelected = (d) => d === day && viewYear === year && viewMonth === month;
+  const isToday = (d) =>
+    d === today.getDate() && viewMonth === today.getMonth() && viewYear === today.getFullYear();
+
+  const prevMonth = () => {
+    if (viewMonth === 0) { setViewYear(y => y - 1); setViewMonth(11); }
+    else setViewMonth(m => m - 1);
+  };
+
+  const nextMonth = () => {
+    if (viewMonth === 11) { setViewYear(y => y + 1); setViewMonth(0); }
+    else setViewMonth(m => m + 1);
   };
 
   return (
-    <div className="modal-overlay" ref={overlayRef} onClick={handleOverlayClick}>
-      <div className="modal">
-        <div className="modal-header">
-          <h3>{isNew ? 'Add Workout' : 'Edit Workout'}</h3>
-          <button className="modal-close" onClick={onClose}>×</button>
+    <div className="date-picker-overlay" onClick={onClose}>
+      <div className="date-picker-sheet" onClick={e => e.stopPropagation()}>
+        <div className="date-picker-title">{getMonthName(viewYear, viewMonth)}</div>
+        <div className="date-picker-month-nav">
+          <button className="month-picker-btn" onClick={prevMonth}>{Icon.chevronLeft}</button>
+          <span className="month-label" style={{ fontSize: '0.9rem' }}>{getMonthName(viewYear, viewMonth)}</span>
+          <button className="month-picker-btn" onClick={nextMonth}>{Icon.chevronRight}</button>
         </div>
-        <form onSubmit={handleSubmit}>
-          <div className="form-grid">
-            <div className="form-group">
-              <label>Day (1–31)</label>
-              <input type="number" min="1" max="31" value={form.day} onChange={e => handleChange('day', e.target.value)} required />
+        <div className="date-picker-grid">
+          {['S','M','T','W','T','F','S'].map((d, i) => (
+            <div key={i} className="date-picker-day-header">{d}</div>
+          ))}
+          {cells.map((d, i) => (
+            <div
+              key={i}
+              className={`date-picker-cell ${d === null ? 'disabled' : ''} ${isSelected(d) ? 'selected' : ''} ${isToday(d) && !isSelected(d) ? 'today' : ''}`}
+              onClick={d !== null ? () => onSelect(viewYear, viewMonth, d) : undefined}
+            >
+              {d}
             </div>
-            <div className="form-group">
-              <label>Muscle Group</label>
-              <select value={form.muscle_group} onChange={e => handleChange('muscle_group', e.target.value)}>
-                {FORM_MUSCLE_GROUPS.map(mg => <option key={mg} value={mg}>{mg.charAt(0).toUpperCase() + mg.slice(1)}</option>)}
-              </select>
-            </div>
-            <div className="form-group">
-              <label>Reps</label>
-              <input type="number" min="0" value={form.reps} onChange={e => handleChange('reps', e.target.value)} />
-            </div>
-            <div className="form-group">
-              <label>Sets</label>
-              <input type="number" min="0" value={form.sets} onChange={e => handleChange('sets', e.target.value)} />
-            </div>
-            <div className="form-group">
-              <label>Walk (min)</label>
-              <input type="number" min="0" value={form.walk_min} onChange={e => handleChange('walk_min', e.target.value)} />
-            </div>
-            <div className="form-group">
-              <label>Cardio (min)</label>
-              <input type="number" min="0" value={form.cardio_min} onChange={e => handleChange('cardio_min', e.target.value)} />
-            </div>
-            <div className="form-group">
-              <label>HIIT (min)</label>
-              <input type="number" min="0" value={form.hiit_min} onChange={e => handleChange('hiit_min', e.target.value)} />
-            </div>
-            <div className="form-group">
-              <label>Calories</label>
-              <input type="number" min="0" value={form.calories} onChange={e => handleChange('calories', e.target.value)} />
-            </div>
-          </div>
-          {error && <div className="form-error">{error}</div>}
-          <div className="modal-actions">
-            {!isNew && (
-              <button type="button" className="btn btn-danger" onClick={handleDelete}>Delete</button>
-            )}
-            <div className="modal-actions-right">
-              <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
-              <button type="submit" className="btn btn-primary">Save</button>
-            </div>
-          </div>
-        </form>
+          ))}
+        </div>
+        <button className="date-picker-done" onClick={onClose}>Done</button>
       </div>
     </div>
   );
 }
 
-function Dashboard({ data, filter }) {
-  const chartData = useMemo(() => getChartData(data), [data]);
-  const muscleGroups = useMemo(() => getMuscleGroupData(data), [data]);
-  const daily = useMemo(() => getDailySummary(data), [data]);
-
-  const filteredDaily = useMemo(() => {
-    if (filter === 'all') return daily;
-    return daily.map(d => {
-      if (filter === 'cardio') {
-        return { ...d, totalSets: d.walkMin > 0 || d.cardioMin > 0 || d.hiitMin > 0 ? d.totalSets : 0 };
-      }
-      return d;
-    }).filter(d => d.muscleGroups.includes(filter));
-  }, [daily, filter]);
-
-  const totals = useMemo(() => {
-    return filteredDaily.reduce((acc, d) => ({
-      calories: acc.calories + (d.isRest ? 0 : d.calories),
-      sets: acc.sets + d.totalSets,
-      volume: acc.volume + d.totalReps,
-      walk: acc.walk + d.walkMin,
-      cardio: acc.cardio + d.cardioMin,
-      hiit: acc.hiit + d.hiitMin,
-    }), { calories: 0, sets: 0, volume: 0, walk: 0, cardio: 0, hiit: 0 });
-  }, [filteredDaily]);
-
-  const activeDays = filteredDaily.filter(d => !d.isRest).length;
+/* ============================================================
+   SCREEN: DASHBOARD
+   ============================================================ */
+function DashboardScreen({ data, year, month, onNavigateCalendar, onChangeMonth }) {
+  const catTotals = useMemo(() => getCategoryMonthlyTotals(data, year, month), [data, year, month]);
+  const totalVolume = useMemo(() => getMonthlyVolume(data, year, month), [data, year, month]);
+  const totalCals = useMemo(() => getMonthlyCalories(data, year, month), [data, year, month]);
+  const streak = useMemo(() => calculateStreak(data), [data]);
+  const heatmap = useMemo(() => getHeatmapData(data, 28), [data]);
+  const quartiles = useMemo(() => getHeatmapQuartiles(heatmap), [heatmap]);
 
   return (
     <div className="dashboard">
-      <div className="stats-grid">
-        <StatCard label="Active Days" value={activeDays} unit="" color="#6366f1" />
-        <StatCard label="Total Sets" value={totals.sets} unit="" color="#8b5cf6" />
-        <StatCard label="Volume" value={totals.volume.toLocaleString()} unit="reps" color="#ec4899" />
-        <StatCard label="Calories" value={totals.calories.toLocaleString()} unit="" color="#f59e0b" />
-        <StatCard label="Walk" value={totals.walk} unit="min" color="#10b981" />
-        <StatCard label="Cardio" value={totals.cardio} unit="min" color="#06b6d4" />
+      {/* Big stats */}
+      <div className="big-stats">
+        <div className="big-stat">
+          <div className="big-stat-value">{totalVolume.toLocaleString()}</div>
+          <div className="big-stat-label">Total Volume (reps)</div>
+        </div>
+        <div className="big-stat-sep" />
+        <div className="big-stat">
+          <div className="big-stat-value">{totalCals.toLocaleString()}</div>
+          <div className="big-stat-label">Total Calories</div>
+        </div>
       </div>
 
-      <div className="charts-section">
-        <div className="chart-card">
-          <h3>Daily Calories Burned</h3>
-          <div className="bar-chart">
-            {chartData.calories.map(d => (
-              <div key={d.day} className="bar-wrap" title={`Day ${d.day}: ${d.calories} cal`}>
-                <div className="bar" style={{ height: `${Math.min((d.calories / 500) * 100, 100)}%` }} />
-                <span className="bar-label">{d.day}</span>
-              </div>
-            ))}
+      {/* Category cards */}
+      <div className="category-grid">
+        {Object.entries(CATEGORY_CONFIG).map(([key, cfg]) => (
+          <div
+            key={key}
+            className={`category-card ${key}`}
+            onClick={() => onNavigateCalendar(key)}
+          >
+            <div className="category-icon">{cfg.icon}</div>
+            <div className="category-name" style={{ color: cfg.color }}>{cfg.label}</div>
+            <div className="category-value">
+              {catTotals[key].toLocaleString()}
+              <span className="category-unit">{key === 'cardio' ? 'min' : 'sets'}</span>
+            </div>
           </div>
-        </div>
+        ))}
+      </div>
 
-        <div className="chart-card">
-          <h3>Daily Sets</h3>
-          <div className="bar-chart">
-            {chartData.sets.map(d => (
-              <div key={d.day} className="bar-wrap" title={`Day ${d.day}: ${d.sets} sets`}>
-                <div className="bar sets" style={{ height: `${Math.min((d.sets / 20) * 100, 100)}%` }} />
-                <span className="bar-label">{d.day}</span>
-              </div>
-            ))}
-          </div>
-        </div>
+      {/* Streak */}
+      <div className="streak-row">
+        <span className="streak-emoji">🔥</span>
+        <span className="streak-text">{streak} day streak</span>
+        <span className="streak-sub">consecutive workout days</span>
+      </div>
 
-        <div className="chart-card full-width">
-          <h3>Cardio Minutes</h3>
-          <div className="stacked-bar-chart">
-            {chartData.cardio.map(d => {
-              const total = d.walk + d.cardio + d.hiit;
-              return (
-                <div key={d.day} className="stacked-bar-wrap" title={`Day ${d.day}: ${total}min (W:${d.walk} C:${d.cardio} H:${d.hiit})`}>
-                  <div className="stacked-bar">
-                    {d.walk > 0 && <div className="seg walk" style={{ height: `${(d.walk / 60) * 100}%` }} />}
-                    {d.cardio > 0 && <div className="seg cardio" style={{ height: `${(d.cardio / 60) * 100}%` }} />}
-                    {d.hiit > 0 && <div className="seg hiit" style={{ height: `${(d.hiit / 60) * 100}%` }} />}
-                  </div>
-                  <span className="bar-label">{d.day}</span>
-                </div>
-              );
-            })}
-          </div>
-          <div className="chart-legend">
-            <span className="legend-item"><span className="dot walk"></span>Walk</span>
-            <span className="legend-item"><span className="dot cardio"></span>Cardio</span>
-            <span className="legend-item"><span className="dot hiit"></span>HIIT</span>
-          </div>
-        </div>
-
-        <div className="chart-card">
-          <h3>Muscle Groups</h3>
-          <div className="muscle-bars">
-            {muscleGroups.map(mg => (
-              <div key={mg.name} className="muscle-row">
-                <span className="muscle-name">{mg.name}</span>
-                <div className="muscle-bar-wrap">
-                  <div className="muscle-bar" style={{ width: `${(mg.totalSets / 150) * 100}%` }} />
-                </div>
-                <span className="muscle-days">{mg.activeDays}d</span>
-              </div>
-            ))}
-          </div>
+      {/* Heatmap */}
+      <div className="heatmap-section">
+        <div className="heatmap-title">Last 28 Days</div>
+        <div className="heatmap-grid">
+          {heatmap.map(({ date, volume }) => (
+            <div
+              key={date}
+              className={`heatmap-cell l${getHeatmapLevel(volume, quartiles)}`}
+            >
+              <div className="heatmap-tooltip">{date}: {volume} vol</div>
+            </div>
+          ))}
         </div>
       </div>
     </div>
   );
 }
 
-function WeeklyCalendar({ data, filter, onEdit, onDelete }) {
-  const weeks = useMemo(() => getWeeklyData(data), [data]);
-  const [weekIndex, setWeekIndex] = useState(Math.floor((data.length > 0 ? Math.min(31, data.length) - 1 : 0) / 7));
+/* ============================================================
+   SCREEN: CALENDAR
+   ============================================================ */
+function CalendarScreen({ data, year, month, onSelectDay, onAddEntry }) {
+  const today = new Date();
+  const todayStr = formatDate(today.getFullYear(), today.getMonth(), today.getDate());
+  const daysInMonth = getDaysInMonth(year, month);
+  const firstDay = getFirstDayOfMonth(year, month);
+  const dailyTotals = useMemo(() => getDailyTotalsForMonth(data, year, month), [data, year, month]);
 
-  const getDayData = (day) => {
-    if (!day) return null;
-    if (filter === 'all') return day;
-    if (filter === 'cardio') {
-      return day.walkMin > 0 || day.cardioMin > 0 || day.hiitMin > 0 ? day : null;
-    }
-    return day.muscleGroups.includes(filter) ? day : null;
+  // Build calendar cells: leading nulls + days + trailing nulls
+  const cells = [];
+  for (let i = 0; i < firstDay; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+
+  // Pad to complete last week
+  while (cells.length % 7 !== 0) cells.push(null);
+
+  const dotColor = (mg) => {
+    if (['back','biceps','lower_back','traps'].includes(mg)) return '#6366f1';
+    if (['legs','glutes','quads','hamstring','calf'].includes(mg)) return '#10b981';
+    if (['chest','shoulder','triceps','abs'].includes(mg)) return '#ec4899';
+    if (['cardio_walk','cardio_generic','hiit'].includes(mg)) return '#f59e0b';
+    return '#888';
   };
 
-  const goNext = () => {
-    if (weekIndex < weeks.length - 1) setWeekIndex(i => i + 1);
-  };
-  const goPrev = () => {
-    if (weekIndex > 0) setWeekIndex(i => i - 1);
+  // Volume-based background tint (0=lightest, higher=darker)
+  const maxVol = useMemo(() => {
+    const vols = Object.values(dailyTotals).map(d => d.volume);
+    return Math.max(...vols, 1);
+  }, [dailyTotals]);
+
+  const getBgTint = (sets, volume) => {
+    if (sets === 0) return 'transparent';
+    const ratio = Math.min(volume / maxVol, 1);
+    const alpha = 0.08 + ratio * 0.22;
+    return `rgba(16, 185, 129, ${alpha})`;
   };
 
-  // Flatten entries by day to allow per-entry editing
-  const entriesByDay = useMemo(() => {
-    const map = {};
-    data.forEach(entry => {
-      if (!map[entry.day]) map[entry.day] = [];
-      map[entry.day].push(entry);
-    });
-    return map;
-  }, [data]);
-
-  const week = weeks[weekIndex] || [];
-  const isEmpty = week.length === 0;
+  const dayHeaders = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
   return (
-    <div className="calendar-section">
-      <div className="week-nav">
-        <button onClick={goPrev} disabled={weekIndex === 0}>← Prev</button>
-        <span className="week-title">Week {weekIndex + 1} {week.length > 0 ? `(Days ${week[0]?.day}–${week[week.length - 1]?.day})` : ''}</span>
-        <button onClick={goNext} disabled={isEmpty || weekIndex >= weeks.length - 1}>Next →</button>
-      </div>
-      {isEmpty ? (
-        <div className="calendar-empty">No data for this week. Add entries to see them here.</div>
-      ) : (
-        <div className="week-grid">
-          {week.map((day) => {
-            const visible = getDayData(day);
-            const dayEntries = entriesByDay[day.day] || [];
-            return (
-              <div key={day.day} className={`day-card ${day.isRest ? 'rest' : ''} ${!visible ? 'filtered-out' : ''}`}>
-                <div className="day-header">
-                  <span>Day {day.day}</span>
-                  {!day.isRest && dayEntries.length > 0 && (
-                    <button className="day-add-btn" onClick={() => onEdit({ day: day.day, muscle_group: 'chest', reps: 0, sets: 0, walk_min: 0, cardio_min: 0, hiit_min: 0, calories: 0 })} title="Add entry">+</button>
-                  )}
+    <div className="calendar">
+      <div className="calendar-grid">
+        {dayHeaders.map(d => (
+          <div key={d} className="day-header-cell">{d}</div>
+        ))}
+        {cells.map((day, idx) => {
+          if (day === null) {
+            return <div key={`empty-${idx}`} className="calendar-day-cell outside-month" />;
+          }
+          const dateStr = formatDate(year, month, day);
+          const dt = dailyTotals[dateStr] || { sets: 0, volume: 0, calories: 0, muscleGroups: new Set(), isRest: false };
+          const isToday = dateStr === todayStr;
+
+          return (
+            <div
+              key={dateStr}
+              className={`calendar-day-cell ${isToday ? 'today' : ''}`}
+              style={{ background: getBgTint(dt.sets, dt.volume) }}
+              onClick={() => onSelectDay(dateStr)}
+            >
+              <div className="calendar-day-number">{day}</div>
+              {dt.sets > 0 && (
+                <div className="calendar-sets">{dt.sets}s</div>
+              )}
+              {dt.calories > 0 && (
+                <div className="calendar-calories">{dt.calories}cal</div>
+              )}
+              {dt.muscleGroups.size > 0 && (
+                <div className="calendar-dots">
+                  {[...dt.muscleGroups].slice(0, 4).map(mg => (
+                    <div key={mg} className="calendar-dot" style={{ background: dotColor(mg) }} />
+                  ))}
                 </div>
-                {day.isRest ? (
-                  <div className="day-rest">Rest Day</div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      <button className="calendar-add-btn" onClick={onAddEntry}>
+        {Icon.plus} Log Workout
+      </button>
+    </div>
+  );
+}
+
+/* ============================================================
+   SCREEN: LOG WORKOUT
+   ============================================================ */
+function LogScreen({ data, initialDate, onSave, onBack }) {
+  const today = new Date();
+  const [year, setYear] = useState(initialDate ? parseInt(initialDate.split('-')[0]) : today.getFullYear());
+  const [month, setMonth] = useState(initialDate ? parseInt(initialDate.split('-')[1]) - 1 : today.getMonth());
+  const [day, setDay] = useState(initialDate ? parseInt(initialDate.split('-')[2]) : today.getDate());
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [openSections, setOpenSections] = useState(new Set());
+  const [entries, setEntries] = useState(() => {
+    // Load existing entries for this date
+    const dateStr = formatDate(year, month, day);
+    const existing = data.filter(e => e.date === dateStr);
+    if (existing.length === 0) return {};
+    const map = {};
+    existing.forEach(e => { map[e.muscle_group] = { ...e }; });
+    return map;
+  });
+
+  const dateStr = formatDate(year, month, day);
+
+  const updateEntry = (mg, field, value) => {
+    setEntries(prev => {
+      const existing = prev[mg] || {
+        date: dateStr, muscle_group: mg, sets: 0, reps: 0,
+        walk_min: 0, cardio_min: 0, hiit_min: 0, calories: 0,
+      };
+      return { ...prev, [mg]: { ...existing, [field]: value } };
+    });
+  };
+
+  const toggleSection = (mg) => {
+    setOpenSections(prev => {
+      const next = new Set(prev);
+      if (next.has(mg)) next.delete(mg);
+      else next.add(mg);
+      return next;
+    });
+  };
+
+  const isCardio = (mg) => CARDIO_MUSCLE_GROUPS.includes(mg);
+
+  const copyFromYesterday = () => {
+    const d = new Date(year, month, day);
+    d.setDate(d.getDate() - 1);
+    const yesterdayStr = formatDate(d.getFullYear(), d.getMonth(), d.getDate());
+    const yesterdayEntries = data.filter(e => e.date === yesterdayStr);
+    if (yesterdayEntries.length === 0) return;
+    const newEntries = {};
+    yesterdayEntries.forEach(e => {
+      newEntries[e.muscle_group] = { ...e, date: dateStr };
+    });
+    setEntries(newEntries);
+  };
+
+  const markAsRest = () => {
+    setEntries({ rest: { date: dateStr, muscle_group: 'rest', sets: 0, reps: 0, walk_min: 0, cardio_min: 0, hiit_min: 0, calories: 0 } });
+  };
+
+  // Compute totals from entries state
+  const totals = useMemo(() => {
+    let sets = 0, reps = 0, cardioMin = 0, calories = 0;
+    Object.values(entries).forEach(e => {
+      if (e.muscle_group === 'rest') return;
+      if (isCardio(e.muscle_group)) {
+        cardioMin += (e.walk_min || 0) + (e.cardio_min || 0) + (e.hiit_min || 0);
+      } else {
+        sets += e.sets || 0;
+        reps += (e.sets || 0) * (e.reps || 0);
+      }
+      calories += e.calories || 0;
+    });
+    return { sets, reps, cardioMin, calories };
+  }, [entries]);
+
+  const handleSave = () => {
+    const toSave = Object.values(entries).filter(e => {
+      if (e.muscle_group === 'rest') return true;
+      if (isCardio(e.muscle_group)) return (e.walk_min || 0) + (e.cardio_min || 0) + (e.hiit_min || 0) > 0;
+      return (e.sets || 0) > 0;
+    });
+    onSave(dateStr, toSave);
+  };
+
+  const handleDateSelect = (y, m, d) => {
+    setYear(y); setMonth(m); setDay(d);
+    setShowDatePicker(false);
+    const ds = formatDate(y, m, d);
+    const existing = data.filter(e => e.date === ds);
+    if (existing.length === 0) setEntries({});
+    else {
+      const map = {};
+      existing.forEach(e => { map[e.muscle_group] = { ...e }; });
+      setEntries(map);
+    }
+  };
+
+  const prevDay = () => {
+    const d = new Date(year, month, day);
+    d.setDate(d.getDate() - 1);
+    handleDateSelect(d.getFullYear(), d.getMonth(), d.getDate());
+  };
+
+  const nextDay = () => {
+    const d = new Date(year, month, day);
+    d.setDate(d.getDate() + 1);
+    handleDateSelect(d.getFullYear(), d.getMonth(), d.getDate());
+  };
+
+  const dayLabel = new Date(year, month, day).toLocaleDateString('en-US', {
+    weekday: 'short', month: 'short', day: 'numeric', year: 'numeric',
+  });
+
+  const entryCount = (mg) => {
+    const e = entries[mg];
+    if (!e) return '';
+    if (isCardio(mg)) {
+      const m = (e.walk_min || 0) + (e.cardio_min || 0) + (e.hiit_min || 0);
+      return m > 0 ? `${m} min` : '';
+    }
+    return (e.sets || 0) > 0 ? `${e.sets} sets` : '';
+  };
+
+  return (
+    <div className="log">
+      {/* Date picker row */}
+      <div className="log-date-picker">
+        <button className="log-date-btn" onClick={prevDay}>{Icon.chevronLeft}</button>
+        <span className="log-date-label" onClick={() => setShowDatePicker(true)}>{dayLabel}</span>
+        <button className="log-date-btn" onClick={nextDay}>{Icon.chevronRight}</button>
+      </div>
+
+      {/* Quick actions */}
+      <div className="log-quick-actions">
+        <button className="log-quick-btn" onClick={copyFromYesterday}>
+          📋 Copy from yesterday
+        </button>
+        <button className="log-quick-btn" onClick={markAsRest}>
+          😴 Mark as rest day
+        </button>
+      </div>
+
+      {/* Muscle group sections */}
+      <div className="muscle-sections">
+        {MUSCLE_GROUP_ORDER.map(mg => {
+          const cfg = MUSCLE_CONFIG[mg];
+          const isOpen = openSections.has(mg);
+          const count = entryCount(mg);
+
+          return (
+            <div key={mg} className={`muscle-section ${isOpen ? 'open' : ''}`}>
+              <div className="muscle-section-header" onClick={() => toggleSection(mg)}>
+                <div className="muscle-section-color-bar" style={{ background: cfg?.color }} />
+                <span className="muscle-section-name">
+                  {mg.replace('_', ' ')}
+                </span>
+                {count && <span className="muscle-section-count">{count}</span>}
+                <span className="muscle-section-arrow">{Icon.chevronDown}</span>
+              </div>
+              <div className="muscle-section-body">
+                {isCardio(mg) ? (
+                  <>
+                    <div className="stepper-row">
+                      <span className="stepper-label">Walk (min)</span>
+                      <Stepper
+                        value={entries[mg]?.walk_min || 0}
+                        onChange={v => updateEntry(mg, 'walk_min', v)}
+                      />
+                    </div>
+                    <div className="stepper-row">
+                      <span className="stepper-label">Cardio (min)</span>
+                      <Stepper
+                        value={entries[mg]?.cardio_min || 0}
+                        onChange={v => updateEntry(mg, 'cardio_min', v)}
+                      />
+                    </div>
+                    <div className="stepper-row">
+                      <span className="stepper-label">HIIT (min)</span>
+                      <Stepper
+                        value={entries[mg]?.hiit_min || 0}
+                        onChange={v => updateEntry(mg, 'hiit_min', v)}
+                      />
+                    </div>
+                    <div className="stepper-row">
+                      <span className="stepper-label">Calories</span>
+                      <Stepper
+                        value={entries[mg]?.calories || 0}
+                        onChange={v => updateEntry(mg, 'calories', v)}
+                      />
+                    </div>
+                  </>
                 ) : (
-                  <div className="day-content">
-                    {dayEntries.map((entry, idx) => {
-                      const isVisible = filter === 'all' || (filter === 'cardio' ? (entry.walk_min > 0 || entry.cardio_min > 0 || entry.hiit_min > 0) : entry.muscle_group === filter);
-                      return (
-                        <div key={entry._id || idx} className={`day-entry ${!isVisible ? 'entry-filtered' : ''}`} onClick={() => onEdit(entry)}>
-                          <div className="entry-actions">
-                            <span className="entry-muscle">{entry.muscle_group}</span>
-                            <button className="entry-delete" onClick={e => { e.stopPropagation(); onDelete(entry._id); }} title="Delete">×</button>
-                          </div>
-                          {entry.sets > 0 && <div className="entry-stat">{entry.sets}s × {entry.reps}r</div>}
-                          {(entry.walk_min > 0 || entry.cardio_min > 0 || entry.hiit_min > 0) && (
-                            <div className="day-cardio">
-                              {entry.walk_min > 0 && <span>🚶{entry.walk_min}m</span>}
-                              {entry.cardio_min > 0 && <span>🏃{entry.cardio_min}m</span>}
-                              {entry.hiit_min > 0 && <span>⚡{entry.hiit_min}m</span>}
-                            </div>
-                          )}
-                          {entry.calories > 0 && <div className="entry-cal">{entry.calories} cal</div>}
-                        </div>
-                      );
-                    })}
-                  </div>
+                  <>
+                    <div className="stepper-row">
+                      <span className="stepper-label">Sets</span>
+                      <Stepper
+                        value={entries[mg]?.sets || 0}
+                        onChange={v => updateEntry(mg, 'sets', v)}
+                      />
+                    </div>
+                    <div className="stepper-row">
+                      <span className="stepper-label">Reps/set</span>
+                      <Stepper
+                        value={entries[mg]?.reps || 0}
+                        onChange={v => updateEntry(mg, 'reps', v)}
+                      />
+                    </div>
+                  </>
                 )}
               </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function App() {
-  const [rawData, setRawData] = useState([]);
-  const [filter, setFilter] = useState('all');
-  const [activeTab, setActiveTab] = useState('dashboard');
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [modalEntry, setModalEntry] = useState(null); // null = closed, {} = add, {...,_id} = edit
-  const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
-  const menuRef = useRef(null);
-
-  // Load from localStorage on mount
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          // Assign stable IDs if missing
-          const withIds = parsed.map((e, i) => ({ ...e, _id: e._id || `entry-${i}-${Date.now()}` }));
-          setRawData(withIds);
-          setLoading(false);
-          return;
-        }
-      }
-    } catch (err) {
-      console.warn('localStorage read error:', err);
-    }
-    setLoading(false);
-  }, []);
-
-  // Persist to localStorage whenever data changes
-  useEffect(() => {
-    if (!loading) {
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(rawData));
-      } catch (err) {
-        console.warn('localStorage write error:', err);
-      }
-    }
-  }, [rawData, loading]);
-
-  // Close header menu on outside click
-  useEffect(() => {
-    if (!headerMenuOpen) return;
-    const handler = (e) => {
-      if (menuRef.current && !menuRef.current.contains(e.target)) {
-        setHeaderMenuOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [headerMenuOpen]);
-
-  const importCSV = useCallback((e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      try {
-        const text = ev.target.result;
-        const parsed = parseCSV(text);
-        if (!parsed || parsed.length === 0) {
-          setError('CSV file contains no data.'); return;
-        }
-        const withIds = parsed.map((entry, i) => ({
-          ...entry,
-          _id: `entry-${Date.now()}-${i}`,
-        }));
-        setRawData(withIds);
-        setError(null);
-      } catch (err) {
-        setError('Failed to parse CSV: ' + err.message);
-      }
-    };
-    reader.readAsText(file);
-    e.target.value = '';
-  }, []);
-
-  const exportCSV = useCallback(() => {
-    if (rawData.length === 0) return;
-    const exportData = rawData.map(({ _id, ...rest }) => rest);
-    downloadCSV(toCSV(exportData));
-  }, [rawData]);
-
-  const handleSaveEntry = useCallback((formData, id) => {
-    setRawData(prev => {
-      if (id) {
-        // Update existing
-        return prev.map(e => e._id === id ? { ...formData, _id: id } : e);
-      } else {
-        // Add new
-        return [...prev, { ...formData, _id: `entry-${Date.now()}` }];
-      }
-    });
-    setModalEntry(null);
-  }, []);
-
-  const handleDeleteEntry = useCallback((id) => {
-    if (window.confirm('Delete this entry?')) {
-      setRawData(prev => prev.filter(e => e._id !== id));
-    }
-  }, []);
-
-  const handleClearAll = useCallback(() => {
-    if (window.confirm('Clear all workout data? This cannot be undone.')) {
-      setRawData([]);
-      localStorage.removeItem(STORAGE_KEY);
-      setHeaderMenuOpen(false);
-    }
-  }, []);
-
-  const openAddModal = useCallback(() => setModalEntry({ day: 1, muscle_group: 'chest', reps: 0, sets: 0, walk_min: 0, cardio_min: 0, hiit_min: 0, calories: 0 }), []);
-  const openEditModal = useCallback((entry) => setModalEntry(entry), []);
-  const closeModal = useCallback(() => setModalEntry(null), []);
-
-  if (loading) return <div className="loading">Loading exercise data...</div>;
-
-  const hasData = rawData.length > 0;
-
-  return (
-    <div className="app">
-      <header className="app-header">
-        <h1>💪 Exercise Tracker</h1>
-        <div className="header-right">
-          <div className="header-actions">
-            {hasData && (
-              <>
-                <label className="btn btn-sm import-btn">
-                  <input type="file" accept=".csv" style={{ display: 'none' }} onChange={importCSV} />
-                  Import CSV
-                </label>
-                <button className="btn btn-sm" onClick={exportCSV} title="Export CSV">Export CSV</button>
-              </>
-            )}
-            <button className="btn btn-sm" onClick={() => setHeaderMenuOpen(o => !o)} title="More options">⋮</button>
-          </div>
-          {headerMenuOpen && (
-            <div className="header-menu" ref={menuRef}>
-              {hasData && <button className="header-menu-item danger" onClick={handleClearAll}>Clear All Data</button>}
             </div>
-          )}
+          );
+        })}
+      </div>
+
+      {/* Sticky footer */}
+      <div className="log-footer">
+        <div className="log-totals">
+          Today: <strong>{totals.sets} sets</strong> · <strong>{totals.reps} reps</strong> · <strong>{totals.cardioMin} min</strong> cardio · <strong>{totals.calories} cal</strong>
         </div>
-      </header>
+        <button className="log-save-btn" onClick={handleSave}>Save</button>
+      </div>
 
-      {!hasData ? (
-        <EmptyState onImport={importCSV} onAddManually={openAddModal} />
-      ) : (
-        <>
-          <nav className="tab-nav">
-            <button className={activeTab === 'dashboard' ? 'active' : ''} onClick={() => setActiveTab('dashboard')}>Dashboard</button>
-            <button className={activeTab === 'calendar' ? 'active' : ''} onClick={() => setActiveTab('calendar')}>Calendar</button>
-          </nav>
-
-          <div className="filter-bar">
-            {MUSCLE_GROUPS.map(mg => (
-              <button
-                key={mg}
-                className={`filter-btn ${filter === mg ? 'active' : ''}`}
-                onClick={() => setFilter(mg)}
-              >
-                {mg === 'all' ? 'All' : mg.charAt(0).toUpperCase() + mg.slice(1)}
-              </button>
-            ))}
-          </div>
-
-          <main>
-            {activeTab === 'dashboard' ? (
-              <Dashboard data={rawData} filter={filter} />
-            ) : (
-              <WeeklyCalendar data={rawData} filter={filter} onEdit={openEditModal} onDelete={handleDeleteEntry} />
-            )}
-          </main>
-        </>
-      )}
-
-      {/* Floating Add Button — always visible */}
-      <button className="fab" onClick={openAddModal} title="Add Workout">+</button>
-
-      {error && <div className="error-banner">{error} <button onClick={() => setError(null)}>×</button></div>}
-
-      {modalEntry !== null && (
-        <WorkoutModal
-          entry={modalEntry}
-          onSave={handleSaveEntry}
-          onDelete={handleDeleteEntry}
-          onClose={closeModal}
+      {showDatePicker && (
+        <DatePickerModal
+          year={year} month={month} day={day}
+          onSelect={handleDateSelect}
+          onClose={() => setShowDatePicker(false)}
         />
       )}
     </div>
   );
 }
 
-export default App;
+/* ============================================================
+   SCREEN: STATS
+   ============================================================ */
+function StatsScreen({ data, year, month }) {
+  const stats = useMemo(() => getStatsData(data, year, month), [data, year, month]);
+  const { categoryTotals, muscleTotals, dailyVolume } = stats;
+
+  const totalVol = Object.values(categoryTotals).reduce((a, b) => a + b, 0) || 1;
+
+  const handleExport = () => {
+    const csv = toCSV(data);
+    downloadCSV(csv, `exercise-tracker-${getMonthKey(year, month)}.csv`);
+  };
+
+  // Bar chart data for categories
+  const catBars = Object.entries(CATEGORY_CONFIG).map(([key, cfg]) => ({
+    label: cfg.label,
+    value: categoryTotals[key] || 0,
+    color: cfg.color,
+  }));
+
+  const maxCat = Math.max(...catBars.map(b => b.value), 1);
+
+  // Daily volume chart
+  const daysInMonth = getDaysInMonth(year, month);
+  const dailyData = [];
+  let maxDailyVol = 1;
+  for (let d = 1; d <= daysInMonth; d++) {
+    const ds = formatDate(year, month, d);
+    const v = dailyVolume[ds] || 0;
+    dailyData.push({ day: d, volume: v });
+    if (v > maxDailyVol) maxDailyVol = v;
+  }
+
+  // Pie chart — muscle group percentages
+  const musclePie = Object.entries(muscleTotals)
+    .filter(([mg]) => mg !== 'rest')
+    .map(([mg, totals]) => {
+      const cfg = MUSCLE_CONFIG[mg];
+      const vol = totals.volume || 0;
+      const pct = totalVol > 0 ? Math.round((vol / totalVol) * 100) : 0;
+      return { mg, vol, pct, color: cfg?.color || '#888' };
+    })
+    .sort((a, b) => b.vol - a.vol);
+
+  // Build conic-gradient for pie
+  const buildConic = (slices) => {
+    let currentDeg = 0;
+    const parts = [];
+    for (const s of slices) {
+      const deg = (s.pct / 100) * 360;
+      if (deg > 0) {
+        parts.push(`${s.color} ${currentDeg}deg ${currentDeg + deg}deg`);
+        currentDeg += deg;
+      }
+    }
+    return parts.length > 0 ? `conic-gradient(${parts.join(', ')})` : 'conic-gradient(#333 0deg 360deg)';
+  };
+
+  const monthName = getMonthName(year, month);
+
+  return (
+    <div className="stats">
+      {/* Summary cards */}
+      <div className="stats-grid-2">
+        <div className="stats-mini-card">
+          <div className="stats-mini-value" style={{ color: '#6366f1' }}>
+            {catBars.reduce((s, b) => s + b.value, 0).toLocaleString()}
+          </div>
+          <div className="stats-mini-label">Total Sets</div>
+        </div>
+        <div className="stats-mini-card">
+          <div className="stats-mini-value" style={{ color: '#f59e0b' }}>
+            {catTotals.cardio?.toLocaleString() || 0}
+          </div>
+          <div className="stats-mini-label">Cardio Min</div>
+        </div>
+      </div>
+
+      {/* Bar chart — categories */}
+      <div className="chart-card">
+        <div className="chart-title">Category Totals — {monthName}</div>
+        <div className="bar-chart-container">
+          {catBars.map(b => (
+            <div key={b.label} className="bar-chart-bar-wrap" style={{ height: '100%' }}>
+              <div className="bar-chart-value">{b.value.toLocaleString()}</div>
+              <div
+                className="bar-chart-bar"
+                style={{
+                  height: `${Math.max((b.value / maxCat) * 80, b.value > 0 ? 4 : 0)}%`,
+                  background: b.color,
+                }}
+              />
+              <div className="bar-chart-label">{b.label}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Daily volume trend — SVG bar chart */}
+      <div className="chart-card">
+        <div className="chart-title">Daily Volume — {monthName}</div>
+        <svg className="svg-bar-chart" viewBox={`0 0 ${daysInMonth * 8 + 20} 120`} preserveAspectRatio="none">
+          <defs>
+            <linearGradient id="volGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#6366f1" stopOpacity="0.9" />
+              <stop offset="100%" stopColor="#6366f1" stopOpacity="0.3" />
+            </linearGradient>
+          </defs>
+          {dailyData.map(({ day, volume }, i) => {
+            const barH = maxDailyVol > 0 ? (volume / maxDailyVol) * 90 : 0;
+            const x = 10 + i * 8;
+            const y = 105 - barH;
+            return (
+              <g key={day}>
+                {barH > 0 && (
+                  <rect
+                    className="svg-bar-rect"
+                    x={x} y={y}
+                    width={5} height={barH}
+                    rx={1}
+                    fill="url(#volGrad)"
+                  />
+                )}
+                {day % 5 === 1 && (
+                  <text className="svg-axis-label" x={x + 2} y={115}>{day}</text>
+                )}
+              </g>
+            );
+          })}
+        </svg>
+      </div>
+
+      {/* Pie chart — muscle balance */}
+      {musclePie.length > 0 && (
+        <div className="chart-card">
+          <div className="chart-title">Training Balance — {monthName}</div>
+          <div className="pie-chart-container">
+            <div className="pie-chart" style={{ background: buildConic(musclePie) }} />
+            <div className="pie-legend">
+              {musclePie.slice(0, 6).map(s => (
+                <div key={s.mg} className="pie-legend-item">
+                  <div className="pie-legend-dot" style={{ background: s.color }} />
+                  <span style={{ textTransform: 'capitalize' }}>{s.mg.replace('_', ' ')}</span>
+                  <span className="pie-legend-pct">{s.pct}%</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Muscle table */}
+      {Object.keys(muscleTotals).length > 0 && (
+        <div className="chart-card">
+          <div className="chart-title">Muscle Totals — {monthName}</div>
+          <table className="muscle-table">
+            <thead>
+              <tr>
+                <th>Muscle</th>
+                <th>Sets</th>
+                <th>Reps</th>
+                <th>Volume</th>
+                <th>Cal</th>
+              </tr>
+            </thead>
+            <tbody>
+              {Object.entries(muscleTotals).map(([mg, t]) => (
+                <tr key={mg}>
+                  <td>{mg.replace('_', ' ')}</td>
+                  <td>{t.sets}</td>
+                  <td>{t.reps}</td>
+                  <td>{t.volume.toLocaleString()}</td>
+                  <td>{t.calories || '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <button className="export-btn" onClick={handleExport}>
+        📥 Export to CSV
+      </button>
+    </div>
+  );
+}
+
+/* ============================================================
+   MONTH PICKER
+   ============================================================ */
+function MonthPicker({ year, month, onChange }) {
+  const prevMonth = () => {
+    if (month === 0) onChange(year - 1, 11);
+    else onChange(year, month - 1);
+  };
+  const nextMonth = () => {
+    if (month === 11) onChange(year + 1, 0);
+    else onChange(year, month + 1);
+  };
+
+  return (
+    <div className="month-picker">
+      <button className="month-picker-btn" onClick={prevMonth}>{Icon.chevronLeft}</button>
+      <span className="month-label">{getMonthName(year, month)}</span>
+      <button className="month-picker-btn" onClick={nextMonth}>{Icon.chevronRight}</button>
+    </div>
+  );
+}
+
+/* ============================================================
+   EMPTY STATE
+   ============================================================ */
+function EmptyState({ onStart }) {
+  return (
+    <div className="empty-state">
+      <div className="empty-icon">💪</div>
+      <h2>No workouts logged yet</h2>
+      <p>Start tracking your fitness journey today. Log your first workout to see your progress.</p>
+      <button className="empty-cta" onClick={onStart}>
+        {Icon.plus} Log First Workout
+      </button>
+    </div>
+  );
+}
+
+/* ============================================================
+   APP ROOT
+   ============================================================ */
+export default function App() {
+  const { data, replaceDayEntries } = useAppData();
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const [screen, setScreen] = useState('main'); // 'main' | 'log'
+  const today = new Date();
+  const [year, setYear] = useState(today.getFullYear());
+  const [month, setMonth] = useState(today.getMonth());
+  const [logDate, setLogDate] = useState(null);
+
+  const hasData = data.length > 0;
+
+  const changeMonth = (y, m) => { setYear(y); setMonth(m); };
+
+  const handleNavigateCalendar = (category) => {
+    setActiveTab('calendar');
+    setScreen('main');
+  };
+
+  const handleSelectDay = (dateStr) => {
+    setLogDate(dateStr);
+    setScreen('log');
+  };
+
+  const handleAddEntry = () => {
+    setLogDate(formatDate(today.getFullYear(), today.getMonth(), today.getDate()));
+    setScreen('log');
+  };
+
+  const handleSaveLog = (dateStr, entries) => {
+    replaceDayEntries(dateStr, entries);
+    setScreen('main');
+    setActiveTab('calendar');
+  };
+
+  const handleBackFromLog = () => {
+    setScreen('main');
+    setLogDate(null);
+  };
+
+  // If empty, show empty state
+  if (!hasData && screen === 'main' && activeTab === 'dashboard') {
+    return (
+      <div className="app">
+        <header className="header">
+          <div className="header-title">💪 Exercise Tracker</div>
+          <MonthPicker year={year} month={month} onChange={changeMonth} />
+        </header>
+        <main className="main-content">
+          <EmptyState onStart={handleAddEntry} />
+        </main>
+      </div>
+    );
+  }
+
+  return (
+    <div className="app">
+      {/* Header — only on main screens */}
+      {screen === 'main' && (
+        <header className="header">
+          <div className="header-title">💪 Exercise Tracker</div>
+          <MonthPicker year={year} month={month} onChange={changeMonth} />
+        </header>
+      )}
+
+      {/* Main content */}
+      {screen === 'main' ? (
+        <main className="main-content">
+          {activeTab === 'dashboard' && (
+            <DashboardScreen
+              data={data}
+              year={year} month={month}
+              onNavigateCalendar={handleNavigateCalendar}
+              onChangeMonth={changeMonth}
+            />
+          )}
+          {activeTab === 'calendar' && (
+            <CalendarScreen
+              data={data}
+              year={year} month={month}
+              onSelectDay={handleSelectDay}
+              onAddEntry={handleAddEntry}
+            />
+          )}
+          {activeTab === 'stats' && (
+            <StatsScreen
+              data={data}
+              year={year} month={month}
+            />
+          )}
+        </main>
+      ) : (
+        <main className="main-content">
+          <LogScreen
+            data={data}
+            initialDate={logDate}
+            onSave={handleSaveLog}
+            onBack={handleBackFromLog}
+          />
+        </main>
+      )}
+
+      {/* Bottom tab bar */}
+      {screen === 'main' && (
+        <nav className="tab-bar">
+          <button
+            className={`tab-item ${activeTab === 'dashboard' ? 'active' : ''}`}
+            onClick={() => setActiveTab('dashboard')}
+          >
+            <span className="tab-icon">{Icon.home}</span>
+            Dashboard
+          </button>
+          <button
+            className={`tab-item ${activeTab === 'calendar' ? 'active' : ''}`}
+            onClick={() => setActiveTab('calendar')}
+          >
+            <span className="tab-icon">{Icon.calendar}</span>
+            Calendar
+          </button>
+          <button
+            className={`tab-item ${activeTab === 'stats' ? 'active' : ''}`}
+            onClick={() => setActiveTab('stats')}
+          >
+            <span className="tab-icon">{Icon.stats}</span>
+            Stats
+          </button>
+        </nav>
+      )}
+    </div>
+  );
+}
