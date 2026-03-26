@@ -659,6 +659,7 @@ function StatsScreen({ data, year, month }) {
   };
 
   const monthName = getMonthName(year, month);
+  const totalSetsAll = catBars.reduce((s, b) => s + b.value, 0);
 
   return (
     <div className="stats">
@@ -666,13 +667,13 @@ function StatsScreen({ data, year, month }) {
       <div className="stats-grid-2">
         <div className="stats-mini-card">
           <div className="stats-mini-value" style={{ color: '#6366f1' }}>
-            {catBars.reduce((s, b) => s + b.value, 0).toLocaleString()}
+            {totalSetsAll.toLocaleString()}
           </div>
           <div className="stats-mini-label">Total Sets</div>
         </div>
         <div className="stats-mini-card">
           <div className="stats-mini-value" style={{ color: '#f59e0b' }}>
-            {catTotals.cardio?.toLocaleString() || 0}
+            {categoryTotals.cardio?.toLocaleString() || 0}
           </div>
           <div className="stats-mini-label">Cardio Min</div>
         </div>
