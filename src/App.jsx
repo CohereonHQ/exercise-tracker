@@ -115,39 +115,18 @@ function Stepper({ value, onChange, min = 0, max = 999, step = 1 }) {
   const intervalRef = useRef(null);
   const timeoutRef = useRef(null);
 
-  const decRef = useRef(null);
-  const incRef = useRef(null);
-
-  useEffect(() => {
-    const dec = decRef.current;
-    const inc = incRef.current;
-    if (!dec || !inc) return;
-
-    const handleDec = () => onChange(prev => Math.min(max, Math.max(min, (prev || 0) - step)));
-    const handleInc = () => onChange(prev => Math.min(max, Math.max(min, (prev || 0) + step)));
-
-    dec.addEventListener('click', handleDec);
-    inc.addEventListener('click', handleInc);
-
-    return () => {
-      dec.removeEventListener('click', handleDec);
-      inc.removeEventListener('click', handleInc);
-    };
-  }, [max, min, step]);
-
   return (
     <div className="stepper-controls">
-      <button ref={decRef} type="button" className="stepper-btn">−</button>
       <input
-        type="number"
-        className="stepper-input"
+        type="range"
+        className="stepper-slider"
         value={value}
         min={min}
         max={max}
         step={step}
-        onChange={e => onChange(Math.min(max, Math.max(min, Number(e.target.value) || 0)))}
+        onChange={e => onChange(Number(e.target.value))}
       />
-      <button ref={incRef} type="button" className="stepper-btn">+</button>
+      <span className="stepper-value">{value}</span>
     </div>
   );
 }
