@@ -240,8 +240,29 @@ export function getMonthComparison(sessions, year, month) {
   const lastMonthStart = new Date(year, month - 1, 1);
   const lastMonthEnd = new Date(year, month, 0, 23, 59, 59, 999);
 
-  const thisData = getWeekTotals(sessions, thisMonthStart, thisMonthEnd);
-  const lastData = getWeekTotals(sessions, lastMonthStart, lastMonthEnd);
+  const thisMonthStartStr = thisMonthStart.toISOString().split('T')[0];
+  const thisMonthEndStr = thisMonthEnd.toISOString().split('T')[0];
+  const lastMonthStartStr = lastMonthStart.toISOString().split('T')[0];
+  const lastMonthEndStr = lastMonthEnd.toISOString().split('T')[0];
+
+  let thisSets = 0, thisTonnage = 0, thisDays = 0;
+  let lastSets = 0, lastTonnage = 0, lastDays = 0;
+
+  for (const [dateStr, session] of Object.entries(sessions)) {
+    if (session.isRest) continue;
+    const daySets = (session.exercises || []).reduce((sum, ex) => sum + (ex.sets || []).length, 0);
+    const dayTonnage = (session.exercises || []).reduce((sum, ex) => {
+      return sum + (ex.sets || []).reduce((s, set) => s + (set.weight_kg || 0) * (set.reps || 0), 0);
+    }, 0);
+    const isThisMonth = dateStr >= thisMonthStartStr && dateStr <= thisMonthEndStr;
+    const isLastMonth = dateStr >= lastMonthStartStr && dateStr <= lastMonthEndStr;
+    if (daySets > 0) {
+      if (isThisMonth) thisDays++;
+      if (isLastMonth) lastDays++;
+    }
+    if (isThisMonth) { thisSets += daySets; thisTonnage += dayTonnage; }
+    if (isLastMonth) { lastSets += daySets; lastTonnage += dayTonnage; }
+  }
 
   const pctChange = (curr, prev) => {
     if (prev === 0) return curr > 0 ? 100 : 0;
@@ -249,11 +270,11 @@ export function getMonthComparison(sessions, year, month) {
   };
 
   return {
-    thisMonth: thisData,
-    lastMonth: lastData,
-    setsChange: pctChange(thisData.sets, lastData.sets),
-    tonnageChange: pctChange(thisData.tonnage, lastData.tonnage),
-    daysChange: pctChange(thisData.workoutDays, lastData.workoutDays),
+    thisWeek: { sets: thisSets, tonnage: thisTonnage, workoutDays: thisDays },
+    lastWeek: { sets: lastSets, tonnage: lastTonnage, workoutDays: lastDays },
+    setsChange: pctChange(thisSets, lastSets),
+    tonnageChange: pctChange(thisTonnage, lastTonnage),
+    daysChange: pctChange(thisDays, lastDays),
   };
 }
 
