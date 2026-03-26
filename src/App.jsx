@@ -1186,23 +1186,8 @@ export default function App() {
     );
   }
 
-  // Empty state
-  if (!hasData && screen === 'main' && activeTab === 'dashboard') {
-    return (
-      <div className="app">
-        <header className="header">
-          <div className="header-title">💪 Exercise Tracker</div>
-          <div className="header-settings-btn" onClick={handleOpenSettings}>
-            {Icon.settings}
-          </div>
-          <MonthPicker year={year} month={month} onChange={changeMonth} />
-        </header>
-        <main className="main-content">
-          <EmptyState onStart={handleAddEntry} />
-        </main>
-      </div>
-    );
-  }
+  // Show empty state inside main content when no data
+  const showEmptyState = !hasData && screen === 'main' && activeTab === 'dashboard';
 
   return (
     <div className="app">
@@ -1222,7 +1207,9 @@ export default function App() {
       {/* Main content */}
       {screen === 'main' ? (
         <main className="main-content">
-          {activeTab === 'dashboard' && (
+          {showEmptyState ? (
+            <EmptyState onStart={handleAddEntry} />
+          ) : activeTab === 'dashboard' ? (
             <DashboardScreen
               sessions={sessions}
               year={year} month={month}
@@ -1230,8 +1217,7 @@ export default function App() {
               onChangeMonth={changeMonth}
               onOpenSettings={handleOpenSettings}
             />
-          )}
-          {activeTab === 'calendar' && (
+          ) : activeTab === 'calendar' ? (
             <CalendarScreen
               sessions={sessions}
               year={year} month={month}
@@ -1239,10 +1225,9 @@ export default function App() {
               onSelectDay={handleSelectDay}
               onAddEntry={handleAddEntry}
             />
-          )}
-          {activeTab === 'stats' && (
+          ) : activeTab === 'stats' ? (
             <StatsScreen sessions={sessions} year={year} month={month} />
-          )}
+          ) : null}
         </main>
       ) : (
         <main className="main-content">
