@@ -115,39 +115,12 @@ function Stepper({ value, onChange, min = 0, max = 999, step = 1 }) {
   const intervalRef = useRef(null);
   const timeoutRef = useRef(null);
 
-  const startHold = (delta) => {
-    const tick = () => {
-      onChange(prev => Math.min(max, Math.max(min, prev + delta)));
-    };
-    timeoutRef.current = setTimeout(() => {
-      intervalRef.current = setInterval(tick, 80);
-    }, 400);
-  };
-
-  const endHold = () => {
-    clearTimeout(timeoutRef.current);
-    clearInterval(intervalRef.current);
-  };
-
-  const handlePointerDown = (delta) => (e) => {
-    e.preventDefault();
-    onChange(prev => Math.min(max, Math.max(min, prev + delta)));
-    startHold(delta);
-  };
-
-  useEffect(() => () => {
-    clearTimeout(timeoutRef.current);
-    clearInterval(intervalRef.current);
-  }, []);
-
   return (
     <div className="stepper-controls">
       <button
+        type="button"
         className="stepper-btn"
-        onPointerDown={handlePointerDown(-step)}
-        onPointerUp={endHold}
-        onPointerLeave={endHold}
-        onContextMenu={e => e.preventDefault()}
+        onClick={() => onChange(prev => Math.min(max, Math.max(min, prev - step)))}
       >−</button>
       <input
         type="number"
@@ -158,11 +131,9 @@ function Stepper({ value, onChange, min = 0, max = 999, step = 1 }) {
         onChange={e => onChange(Math.min(max, Math.max(min, Number(e.target.value) || 0)))}
       />
       <button
+        type="button"
         className="stepper-btn"
-        onPointerDown={handlePointerDown(step)}
-        onPointerUp={endHold}
-        onPointerLeave={endHold}
-        onContextMenu={e => e.preventDefault()}
+        onClick={() => onChange(prev => Math.min(max, Math.max(min, prev + step)))}
       >+</button>
     </div>
   );
