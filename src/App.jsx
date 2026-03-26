@@ -115,26 +115,39 @@ function Stepper({ value, onChange, min = 0, max = 999, step = 1 }) {
   const intervalRef = useRef(null);
   const timeoutRef = useRef(null);
 
+  const inputRef = useRef(null);
+
+  const decrement = () => {
+    if (!inputRef.current) return;
+    const newVal = Math.min(max, Math.max(min, value - step));
+    inputRef.current.value = newVal;
+    // Dispatch a React-compatible input event
+    const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+    nativeInputValueSetter.call(inputRef.current, newVal);
+    inputRef.current.dispatchEvent(new Event('input', { bubbles: true }));
+  };
+
+  const increment = () => {
+    if (!inputRef.current) return;
+    const newVal = Math.min(max, Math.max(min, value + step));
+    inputRef.current.value = newVal;
+    const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+    nativeInputValueSetter.call(inputRef.current, newVal);
+    inputRef.current.dispatchEvent(new Event('input', { bubbles: true }));
+  };
+
   return (
     <div className="stepper-controls">
-      <button
-        type="button"
-        className="stepper-btn"
-        onTouchStart={() => onChange(prev => Math.min(max, Math.max(min, prev - step)))}
-      >−</button>
+      <button type="button" className="stepper-btn" onClick={decrement}>−</button>
       <input
+        ref={inputRef}
         type="number"
         className="stepper-input"
-        value={value}
+        defaultValue={value}
         min={min}
         max={max}
-        onChange={e => onChange(Math.min(max, Math.max(min, Number(e.target.value) || 0)))}
       />
-      <button
-        type="button"
-        className="stepper-btn"
-        onTouchStart={() => onChange(prev => Math.min(max, Math.max(min, prev + step)))}
-      >+</button>
+      <button type="button" className="stepper-btn" onClick={increment}>+</button>
     </div>
   );
 }
