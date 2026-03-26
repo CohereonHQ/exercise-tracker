@@ -1,14 +1,163 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { parseCSV, getDailySummary, getMuscleGroupData, getWeeklyData, getChartData } from './utils/dataParser';
 import './App.css';
 
-const MUSCLE_GROUPS = ['all', 'chest', 'back', 'legs', 'shoulders', 'biceps', 'triceps', 'core', 'cardio'];
+const STORAGE_KEY = 'exerciseTrackerData';
+const MUSCLE_GROUPS = ['all', 'chest', 'back', 'legs', 'shoulders', 'biceps', 'triceps', 'core', 'cardio', 'rest'];
+const FORM_MUSCLE_GROUPS = ['chest', 'back', 'legs', 'shoulders', 'biceps', 'triceps', 'core', 'cardio', 'rest'];
+
+const CSV_HEADERS = 'day,muscle_group,reps,sets,walk_min,cardio_min,hiit_min,calories';
+
+function toCSV(data) {
+  const rows = data.map(e => `${e.day},${e.muscle_group},${e.reps},${e.sets},${e.walk_min},${e.cardio_min},${e.hiit_min},${e.calories}`);
+  return [CSV_HEADERS, ...rows].join('\n');
+}
+
+function downloadCSV(csvText, filename = 'exercise_data.csv') {
+  const blob = new Blob([csvText], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function validateEntry(entry) {
+  if (!entry.day || entry.day < 1 || entry.day > 31) return 'Day must be between 1 and 31';
+  if (!FORM_MUSCLE_GROUPS.includes(entry.muscle_group)) return 'Invalid muscle group';
+  if (entry.reps < 0 || entry.sets < 0 || entry.walk_min < 0 || entry.cardio_min < 0 || entry.hiit_min < 0 || entry.calories < 0) {
+    return 'All numeric fields must be 0 or greater';
+  }
+  return null;
+}
 
 function StatCard({ label, value, unit, color }) {
   return (
     <div className="stat-card" style={{ '--accent': color }}>
       <div className="stat-value">{value}<span className="stat-unit">{unit}</span></div>
       <div className="stat-label">{label}</div>
+    </div>
+  );
+}
+
+function EmptyState({ onImport }) {
+  return (
+    <div className="empty-state">
+      <div className="empty-icon">📋</div>
+      <h2>No workout data yet</h2>
+      <p>Import a CSV file or add entries manually to get started.</p>
+      <label className="btn btn-primary import-btn">
+        <input type="file" accept=".csv" style={{ display: 'none' }} onChange={onImport} />
+        Import CSV
+      </label>
+    </div>
+  );
+}
+
+function WorkoutModal({ entry, onSave, onDelete, onClose }) {
+  const isNew = !entry._id;
+  const [form, setForm] = useState({
+    day: entry.day ?? '',
+    muscle_group: entry.muscle_group ?? 'chest',
+    reps: entry.reps ?? '',
+    sets: entry.sets ?? '',
+    walk_min: entry.walk_min ?? '',
+    cardio_min: entry.cardio_min ?? '',
+    hiit_min: entry.hiit_min ?? '',
+    calories: entry.calories ?? '',
+  });
+  const [error, setError] = useState('');
+  const overlayRef = useRef(null);
+
+  const handleChange = (field, val) => {
+    setForm(f => ({ ...f, [field]: val }));
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    const parsed = {
+      ...form,
+      day: parseInt(form.day, 10),
+      reps: parseInt(form.reps, 10) || 0,
+      sets: parseInt(form.sets, 10) || 0,
+      walk_min: parseInt(form.walk_min, 10) || 0,
+      cardio_min: parseInt(form.cardio_min, 10) || 0,
+      hiit_min: parseInt(form.hiit_min, 10) || 0,
+      calories: parseInt(form.calories, 10) || 0,
+    };
+    const err = validateEntry(parsed);
+    if (err) { setError(err); return; }
+    setError('');
+    onSave(parsed, entry._id);
+  };
+
+  const handleDelete = () => {
+    if (window.confirm('Delete this entry?')) {
+      onDelete(entry._id);
+    }
+  };
+
+  const handleOverlayClick = (e) => {
+    if (e.target === overlayRef.current) onClose();
+  };
+
+  return (
+    <div className="modal-overlay" ref={overlayRef} onClick={handleOverlayClick}>
+      <div className="modal">
+        <div className="modal-header">
+          <h3>{isNew ? 'Add Workout' : 'Edit Workout'}</h3>
+          <button className="modal-close" onClick={onClose}>×</button>
+        </div>
+        <form onSubmit={handleSubmit}>
+          <div className="form-grid">
+            <div className="form-group">
+              <label>Day (1–31)</label>
+              <input type="number" min="1" max="31" value={form.day} onChange={e => handleChange('day', e.target.value)} required />
+            </div>
+            <div className="form-group">
+              <label>Muscle Group</label>
+              <select value={form.muscle_group} onChange={e => handleChange('muscle_group', e.target.value)}>
+                {FORM_MUSCLE_GROUPS.map(mg => <option key={mg} value={mg}>{mg.charAt(0).toUpperCase() + mg.slice(1)}</option>)}
+              </select>
+            </div>
+            <div className="form-group">
+              <label>Reps</label>
+              <input type="number" min="0" value={form.reps} onChange={e => handleChange('reps', e.target.value)} />
+            </div>
+            <div className="form-group">
+              <label>Sets</label>
+              <input type="number" min="0" value={form.sets} onChange={e => handleChange('sets', e.target.value)} />
+            </div>
+            <div className="form-group">
+              <label>Walk (min)</label>
+              <input type="number" min="0" value={form.walk_min} onChange={e => handleChange('walk_min', e.target.value)} />
+            </div>
+            <div className="form-group">
+              <label>Cardio (min)</label>
+              <input type="number" min="0" value={form.cardio_min} onChange={e => handleChange('cardio_min', e.target.value)} />
+            </div>
+            <div className="form-group">
+              <label>HIIT (min)</label>
+              <input type="number" min="0" value={form.hiit_min} onChange={e => handleChange('hiit_min', e.target.value)} />
+            </div>
+            <div className="form-group">
+              <label>Calories</label>
+              <input type="number" min="0" value={form.calories} onChange={e => handleChange('calories', e.target.value)} />
+            </div>
+          </div>
+          {error && <div className="form-error">{error}</div>}
+          <div className="modal-actions">
+            {!isNew && (
+              <button type="button" className="btn btn-danger" onClick={handleDelete}>Delete</button>
+            )}
+            <div className="modal-actions-right">
+              <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
+              <button type="submit" className="btn btn-primary">Save</button>
+            </div>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }
@@ -120,11 +269,9 @@ function Dashboard({ data, filter }) {
   );
 }
 
-function WeeklyCalendar({ data, filter }) {
+function WeeklyCalendar({ data, filter, onEdit, onDelete }) {
   const weeks = useMemo(() => getWeeklyData(data), [data]);
   const [weekIndex, setWeekIndex] = useState(Math.floor((data.length > 0 ? Math.min(31, data.length) - 1 : 0) / 7));
-
-  const muscleGroups = useMemo(() => getMuscleGroupData(data), [data]);
 
   const getDayData = (day) => {
     if (!day) return null;
@@ -142,48 +289,72 @@ function WeeklyCalendar({ data, filter }) {
     if (weekIndex > 0) setWeekIndex(i => i - 1);
   };
 
+  // Flatten entries by day to allow per-entry editing
+  const entriesByDay = useMemo(() => {
+    const map = {};
+    data.forEach(entry => {
+      if (!map[entry.day]) map[entry.day] = [];
+      map[entry.day].push(entry);
+    });
+    return map;
+  }, [data]);
+
   const week = weeks[weekIndex] || [];
+  const isEmpty = week.length === 0;
 
   return (
     <div className="calendar-section">
       <div className="week-nav">
         <button onClick={goPrev} disabled={weekIndex === 0}>← Prev</button>
-        <span className="week-title">Week {weekIndex + 1} (Days {week[0]?.day}–{week[week.length - 1]?.day})</span>
-        <button onClick={goNext} disabled={weekIndex === weeks.length - 1}>Next →</button>
+        <span className="week-title">Week {weekIndex + 1} {week.length > 0 ? `(Days ${week[0]?.day}–${week[week.length - 1]?.day})` : ''}</span>
+        <button onClick={goNext} disabled={isEmpty || weekIndex >= weeks.length - 1}>Next →</button>
       </div>
-      <div className="week-grid">
-        {week.map((day, i) => {
-          const visible = getDayData(day);
-          return (
-            <div key={day.day} className={`day-card ${day.isRest ? 'rest' : ''} ${!visible ? 'filtered-out' : ''}`}>
-              <div className="day-header">Day {day.day}</div>
-              {day.isRest ? (
-                <div className="day-rest">Rest Day</div>
-              ) : (
-                <div className="day-content">
-                  {day.muscleGroups.length > 0 && (
-                    <div className="day-muscles">
-                      {day.muscleGroups.map(m => (
-                        <span key={m} className="muscle-tag">{m}</span>
-                      ))}
-                    </div>
-                  )}
-                  {day.totalSets > 0 && <div className="day-stat"><span className="day-stat-val">{day.totalSets}</span> sets</div>}
-                  {day.totalReps > 0 && <div className="day-stat"><span className="day-stat-val">{day.totalReps}</span> reps</div>}
-                  {day.calories > 0 && <div className="day-stat"><span className="day-stat-val">{day.calories}</span> cal</div>}
-                  {(day.walkMin > 0 || day.cardioMin > 0 || day.hiitMin > 0) && (
-                    <div className="day-cardio">
-                      {day.walkMin > 0 && <span>🚶{day.walkMin}m</span>}
-                      {day.cardioMin > 0 && <span>🏃{day.cardioMin}m</span>}
-                      {day.hiitMin > 0 && <span>⚡{day.hiitMin}m</span>}
-                    </div>
+      {isEmpty ? (
+        <div className="calendar-empty">No data for this week. Add entries to see them here.</div>
+      ) : (
+        <div className="week-grid">
+          {week.map((day) => {
+            const visible = getDayData(day);
+            const dayEntries = entriesByDay[day.day] || [];
+            return (
+              <div key={day.day} className={`day-card ${day.isRest ? 'rest' : ''} ${!visible ? 'filtered-out' : ''}`}>
+                <div className="day-header">
+                  <span>Day {day.day}</span>
+                  {!day.isRest && dayEntries.length > 0 && (
+                    <button className="day-add-btn" onClick={() => onEdit({ day: day.day, muscle_group: 'chest', reps: 0, sets: 0, walk_min: 0, cardio_min: 0, hiit_min: 0, calories: 0 })} title="Add entry">+</button>
                   )}
                 </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
+                {day.isRest ? (
+                  <div className="day-rest">Rest Day</div>
+                ) : (
+                  <div className="day-content">
+                    {dayEntries.map((entry, idx) => {
+                      const isVisible = filter === 'all' || (filter === 'cardio' ? (entry.walk_min > 0 || entry.cardio_min > 0 || entry.hiit_min > 0) : entry.muscle_group === filter);
+                      return (
+                        <div key={entry._id || idx} className={`day-entry ${!isVisible ? 'entry-filtered' : ''}`} onClick={() => onEdit(entry)}>
+                          <div className="entry-actions">
+                            <span className="entry-muscle">{entry.muscle_group}</span>
+                            <button className="entry-delete" onClick={e => { e.stopPropagation(); onDelete(entry._id); }} title="Delete">×</button>
+                          </div>
+                          {entry.sets > 0 && <div className="entry-stat">{entry.sets}s × {entry.reps}r</div>}
+                          {(entry.walk_min > 0 || entry.cardio_min > 0 || entry.hiit_min > 0) && (
+                            <div className="day-cardio">
+                              {entry.walk_min > 0 && <span>🚶{entry.walk_min}m</span>}
+                              {entry.cardio_min > 0 && <span>🏃{entry.cardio_min}m</span>}
+                              {entry.hiit_min > 0 && <span>⚡{entry.hiit_min}m</span>}
+                            </div>
+                          )}
+                          {entry.calories > 0 && <div className="entry-cal">{entry.calories} cal</div>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -194,56 +365,188 @@ function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [modalEntry, setModalEntry] = useState(null); // null = closed, {} = add, {...,_id} = edit
+  const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
+  const menuRef = useRef(null);
 
+  // Load from localStorage on mount
   useEffect(() => {
-    fetch(import.meta.env.BASE_URL + 'data.csv')
-      .then(r => {
-        if (!r.ok) throw new Error('Failed to load data');
-        return r.text();
-      })
-      .then(text => {
-        const data = parseCSV(text);
-        setRawData(data);
-        setLoading(false);
-      })
-      .catch(err => {
-        setError(err.message + ' — If hosted on GitHub Pages, data.csv may not be found.');
-        setLoading(false);
-      });
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          // Assign stable IDs if missing
+          const withIds = parsed.map((e, i) => ({ ...e, _id: e._id || `entry-${i}-${Date.now()}` }));
+          setRawData(withIds);
+          setLoading(false);
+          return;
+        }
+      }
+    } catch (err) {
+      console.warn('localStorage read error:', err);
+    }
+    setLoading(false);
   }, []);
 
+  // Persist to localStorage whenever data changes
+  useEffect(() => {
+    if (!loading) {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(rawData));
+      } catch (err) {
+        console.warn('localStorage write error:', err);
+      }
+    }
+  }, [rawData, loading]);
+
+  // Close header menu on outside click
+  useEffect(() => {
+    if (!headerMenuOpen) return;
+    const handler = (e) => {
+      if (menuRef.current && !menuRef.current.contains(e.target)) {
+        setHeaderMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [headerMenuOpen]);
+
+  const importCSV = useCallback((e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const text = ev.target.result;
+        const parsed = parseCSV(text);
+        if (!parsed || parsed.length === 0) {
+          setError('CSV file contains no data.'); return;
+        }
+        const withIds = parsed.map((entry, i) => ({
+          ...entry,
+          _id: `entry-${Date.now()}-${i}`,
+        }));
+        setRawData(withIds);
+        setError(null);
+      } catch (err) {
+        setError('Failed to parse CSV: ' + err.message);
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  }, []);
+
+  const exportCSV = useCallback(() => {
+    if (rawData.length === 0) return;
+    const exportData = rawData.map(({ _id, ...rest }) => rest);
+    downloadCSV(toCSV(exportData));
+  }, [rawData]);
+
+  const handleSaveEntry = useCallback((formData, id) => {
+    setRawData(prev => {
+      if (id) {
+        // Update existing
+        return prev.map(e => e._id === id ? { ...formData, _id: id } : e);
+      } else {
+        // Add new
+        return [...prev, { ...formData, _id: `entry-${Date.now()}` }];
+      }
+    });
+    setModalEntry(null);
+  }, []);
+
+  const handleDeleteEntry = useCallback((id) => {
+    if (window.confirm('Delete this entry?')) {
+      setRawData(prev => prev.filter(e => e._id !== id));
+    }
+  }, []);
+
+  const handleClearAll = useCallback(() => {
+    if (window.confirm('Clear all workout data? This cannot be undone.')) {
+      setRawData([]);
+      localStorage.removeItem(STORAGE_KEY);
+      setHeaderMenuOpen(false);
+    }
+  }, []);
+
+  const openAddModal = useCallback(() => setModalEntry({ day: 1, muscle_group: 'chest', reps: 0, sets: 0, walk_min: 0, cardio_min: 0, hiit_min: 0, calories: 0 }), []);
+  const openEditModal = useCallback((entry) => setModalEntry(entry), []);
+  const closeModal = useCallback(() => setModalEntry(null), []);
+
   if (loading) return <div className="loading">Loading exercise data...</div>;
-  if (error) return <div className="error">Error: {error}</div>;
+
+  const hasData = rawData.length > 0;
 
   return (
     <div className="app">
       <header className="app-header">
         <h1>💪 Exercise Tracker</h1>
-        <nav className="tab-nav">
-          <button className={activeTab === 'dashboard' ? 'active' : ''} onClick={() => setActiveTab('dashboard')}>Dashboard</button>
-          <button className={activeTab === 'calendar' ? 'active' : ''} onClick={() => setActiveTab('calendar')}>Calendar</button>
-        </nav>
+        <div className="header-right">
+          <div className="header-actions">
+            {hasData && (
+              <>
+                <label className="btn btn-sm import-btn">
+                  <input type="file" accept=".csv" style={{ display: 'none' }} onChange={importCSV} />
+                  Import CSV
+                </label>
+                <button className="btn btn-sm" onClick={exportCSV} title="Export CSV">Export CSV</button>
+              </>
+            )}
+            <button className="btn btn-sm" onClick={() => setHeaderMenuOpen(o => !o)} title="More options">⋮</button>
+          </div>
+          {headerMenuOpen && (
+            <div className="header-menu" ref={menuRef}>
+              {hasData && <button className="header-menu-item danger" onClick={handleClearAll}>Clear All Data</button>}
+            </div>
+          )}
+        </div>
       </header>
 
-      <div className="filter-bar">
-        {MUSCLE_GROUPS.map(mg => (
-          <button
-            key={mg}
-            className={`filter-btn ${filter === mg ? 'active' : ''}`}
-            onClick={() => setFilter(mg)}
-          >
-            {mg === 'all' ? 'All' : mg.charAt(0).toUpperCase() + mg.slice(1)}
-          </button>
-        ))}
-      </div>
+      {!hasData ? (
+        <EmptyState onImport={importCSV} />
+      ) : (
+        <>
+          <nav className="tab-nav">
+            <button className={activeTab === 'dashboard' ? 'active' : ''} onClick={() => setActiveTab('dashboard')}>Dashboard</button>
+            <button className={activeTab === 'calendar' ? 'active' : ''} onClick={() => setActiveTab('calendar')}>Calendar</button>
+          </nav>
 
-      <main>
-        {activeTab === 'dashboard' ? (
-          <Dashboard data={rawData} filter={filter} />
-        ) : (
-          <WeeklyCalendar data={rawData} filter={filter} />
-        )}
-      </main>
+          <div className="filter-bar">
+            {MUSCLE_GROUPS.map(mg => (
+              <button
+                key={mg}
+                className={`filter-btn ${filter === mg ? 'active' : ''}`}
+                onClick={() => setFilter(mg)}
+              >
+                {mg === 'all' ? 'All' : mg.charAt(0).toUpperCase() + mg.slice(1)}
+              </button>
+            ))}
+          </div>
+
+          <main>
+            {activeTab === 'dashboard' ? (
+              <Dashboard data={rawData} filter={filter} />
+            ) : (
+              <WeeklyCalendar data={rawData} filter={filter} onEdit={openEditModal} onDelete={handleDeleteEntry} />
+            )}
+          </main>
+
+          {/* Floating Add Button */}
+          <button className="fab" onClick={openAddModal} title="Add Workout">+</button>
+        </>
+      )}
+
+      {error && <div className="error-banner">{error} <button onClick={() => setError(null)}>×</button></div>}
+
+      {modalEntry !== null && (
+        <WorkoutModal
+          entry={modalEntry}
+          onSave={handleSaveEntry}
+          onDelete={handleDeleteEntry}
+          onClose={closeModal}
+        />
+      )}
     </div>
   );
 }
