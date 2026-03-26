@@ -233,6 +233,30 @@ export function getWeekComparison(sessions) {
   };
 }
 
+// Month comparison (this month vs last month)
+export function getMonthComparison(sessions, year, month) {
+  const thisMonthStart = new Date(year, month, 1);
+  const thisMonthEnd = new Date(year, month + 1, 0, 23, 59, 59, 999);
+  const lastMonthStart = new Date(year, month - 1, 1);
+  const lastMonthEnd = new Date(year, month, 0, 23, 59, 59, 999);
+
+  const thisData = getWeekTotals(sessions, thisMonthStart, thisMonthEnd);
+  const lastData = getWeekTotals(sessions, lastMonthStart, lastMonthEnd);
+
+  const pctChange = (curr, prev) => {
+    if (prev === 0) return curr > 0 ? 100 : 0;
+    return Math.round(((curr - prev) / prev) * 100);
+  };
+
+  return {
+    thisMonth: thisData,
+    lastMonth: lastData,
+    setsChange: pctChange(thisData.sets, lastData.sets),
+    tonnageChange: pctChange(thisData.tonnage, lastData.tonnage),
+    daysChange: pctChange(thisData.workoutDays, lastData.workoutDays),
+  };
+}
+
 // Calculate streak (consecutive days with >=1 workout, ignoring rest days)
 export function calculateStreak(sessions) {
   const sessionDates = Object.keys(sessions);

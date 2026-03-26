@@ -4,7 +4,7 @@ import {
   getMonthKey, getMonthName, getDaysInMonth, getFirstDayOfMonth, formatDate,
   calculateStreak, getCategoryMonthlyTotals, getMonthlySets, getMonthlyTonnage, getMonthlyCalories,
   getDailyTotalsForMonth, getHeatmapData, getHeatmapQuartiles, getHeatmapLevel,
-  getWeekComparison,
+  getWeekComparison, getMonthComparison,
   getStatsData, toCSV, downloadCSV,
   MUSCLE_GROUP_ORDER, CATEGORY_COLORS, CARDIO_MUSCLE_GROUPS,
   EXERCISE_LIBRARY, SPLIT_MUSCLE_GROUPS,
@@ -280,12 +280,17 @@ function ChangeBadge({ value, label }) {
 }
 
 function DashboardScreen({ sessions, year, month, onNavigateCalendar, onChangeMonth, onOpenSettings, onLogWorkout }) {
+  const [compareMode, setCompareMode] = useState('week'); // 'week' or 'month'
+
   const catTotals = useMemo(() => getCategoryMonthlyTotals(sessions, year, month), [sessions, year, month]);
   const totalSets = useMemo(() => getMonthlySets(sessions, year, month), [sessions, year, month]);
   const totalTonnage = useMemo(() => getMonthlyTonnage(sessions, year, month), [sessions, year, month]);
   const totalCals = useMemo(() => getMonthlyCalories(sessions, year, month), [sessions, year, month]);
   const streak = useMemo(() => calculateStreak(sessions), [sessions]);
   const weekCompare = useMemo(() => getWeekComparison(sessions), [sessions]);
+  const monthCompare = useMemo(() => getMonthComparison(sessions, year, month), [sessions, year, month]);
+
+  const compare = compareMode === 'week' ? weekCompare : monthCompare;
 
   return (
     <div className="dashboard">
@@ -342,27 +347,39 @@ function DashboardScreen({ sessions, year, month, onNavigateCalendar, onChangeMo
 
       {/* This week vs last week */}
       <div className="week-compare">
-        <div className="week-compare-title">This Week vs Last Week</div>
+        <div className="week-compare-header">
+          <div className="week-compare-title">This Week vs Last Week</div>
+          <div className="compare-toggle">
+            <button
+              className={`toggle-btn ${compareMode === 'week' ? 'active' : ''}`}
+              onClick={() => setCompareMode('week')}
+            >Week</button>
+            <button
+              className={`toggle-btn ${compareMode === 'month' ? 'active' : ''}`}
+              onClick={() => setCompareMode('month')}
+            >Month</button>
+          </div>
+        </div>
         <div className="week-compare-row">
           <div className="week-col">
-            <div className="week-col-label">This Week</div>
-            <div className="week-col-sets">{weekCompare.thisWeek.sets} <span>sets</span></div>
-            <div className="week-col-tonnage">{(weekCompare.thisWeek.tonnage / 1000).toFixed(1)}k <span>kg</span></div>
-            <div className="week-col-days">{weekCompare.thisWeek.workoutDays} <span>days</span></div>
+            <div className="week-col-label">{compareMode === 'week' ? 'This Week' : 'This Month'}</div>
+            <div className="week-col-sets">{compare.thisWeek.sets} <span>sets</span></div>
+            <div className="week-col-tonnage">{(compare.thisWeek.tonnage / 1000).toFixed(1)}k <span>kg</span></div>
+            <div className="week-col-days">{compare.thisWeek.workoutDays} <span>days</span></div>
           </div>
           <div className="week-divider" />
           <div className="week-col">
-            <div className="week-col-label">Last Week</div>
-            <div className="week-col-sets dim">{weekCompare.lastWeek.sets} <span>sets</span></div>
-            <div className="week-col-tonnage dim">{(weekCompare.lastWeek.tonnage / 1000).toFixed(1)}k <span>kg</span></div>
-            <div className="week-col-days dim">{weekCompare.lastWeek.workoutDays} <span>days</span></div>
+            <div className="week-col-label">{compareMode === 'week' ? 'Last Week' : 'Last Month'}</div>
+            <div className="week-col-sets dim">{compare.lastWeek.sets} <span>sets</span></div>
+            <div className="week-col-tonnage dim">{(compare.lastWeek.tonnage / 1000).toFixed(1)}k <span>kg</span></div>
+            <div className="week-col-days dim">{compare.lastWeek.workoutDays} <span>days</span></div>
           </div>
           <div className="week-divider" />
           <div className="week-col">
             <div className="week-col-label">Change</div>
-            <ChangeBadge value={weekCompare.setsChange} label="sets" />
-            <ChangeBadge value={weekCompare.tonnageChange} label="kg" />
-            <ChangeBadge value={weekCompare.daysChange} label="days" />
+            <ChangeBadge value={compare.setsChange} label="sets" />
+            <ChangeBadge value={compare.tonnageChange} label="kg" />
+            <ChangeBadge value={compare.daysChange} label="days" />
           </div>
         </div>
       </div>
