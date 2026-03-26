@@ -616,15 +616,15 @@ body {
 }
 
 .stepper-input {
-  width: 60px;
+  width: 80px;
   text-align: center;
   background: var(--bg3);
   border: 1px solid var(--border);
   border-radius: 6px;
   color: var(--text);
-  font-size: 1rem;
+  font-size: 1.1rem;
   font-weight: 700;
-  padding: 8px 4px;
+  padding: 8px 8px;
   -moz-appearance: textfield;
 }
 
@@ -636,6 +636,19 @@ body {
 .stepper-input:focus {
   outline: none;
   border-color: var(--accent);
+}
+
+.stepper-native {
+  width: 100px;
+  -moz-appearance: number-input;
+  -webkit-appearance: number-input;
+}
+
+.stepper-native::-webkit-inner-spin-button,
+.stepper-native::-webkit-outer-spin-button {
+  -webkit-appearance: auto;
+  opacity: 1;
+  height: 28px;
 }
 
 /* Sticky footer */

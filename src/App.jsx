@@ -115,26 +115,17 @@ function Stepper({ value, onChange, min = 0, max = 999, step = 1 }) {
   const intervalRef = useRef(null);
   const timeoutRef = useRef(null);
 
-  const decrement = () => {
-    onChange(prev => Math.min(max, Math.max(min, (prev || 0) - step)));
-  };
-
-  const increment = () => {
-    onChange(prev => Math.min(max, Math.max(min, (prev || 0) + step)));
-  };
-
   return (
     <div className="stepper-controls">
-      <button type="button" className="stepper-btn" onClick={decrement}>−</button>
       <input
         type="number"
-        className="stepper-input"
+        className="stepper-input stepper-native"
         value={value}
         min={min}
         max={max}
-        onChange={e => onChange(prev => Math.min(max, Math.max(min, Number(e.target.value) || 0)))}
+        step={step}
+        onChange={e => onChange(Math.min(max, Math.max(min, Number(e.target.value) || 0)))}
       />
-      <button type="button" className="stepper-btn" onClick={increment}>+</button>
     </div>
   );
 }
