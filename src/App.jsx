@@ -120,7 +120,7 @@ function Stepper({ value, onChange, min = 0, max = 999, step = 1 }) {
       <button
         type="button"
         className="stepper-btn"
-        onClick={() => onChange(prev => Math.min(max, Math.max(min, prev - step)))}
+        onTouchStart={() => onChange(prev => Math.min(max, Math.max(min, prev - step)))}
       >−</button>
       <input
         type="number"
@@ -133,7 +133,7 @@ function Stepper({ value, onChange, min = 0, max = 999, step = 1 }) {
       <button
         type="button"
         className="stepper-btn"
-        onClick={() => onChange(prev => Math.min(max, Math.max(min, prev + step)))}
+        onTouchStart={() => onChange(prev => Math.min(max, Math.max(min, prev + step)))}
       >+</button>
     </div>
   );
